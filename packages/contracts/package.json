@@ -1,0 +1,6 @@
+{
+  "name": "@pact/contracts",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Reserved PactEvaluator and pinned ERC-8183 interface boundary for Phase 1."
+}

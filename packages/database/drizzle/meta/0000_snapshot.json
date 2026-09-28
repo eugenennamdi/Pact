@@ -1,0 +1,1110 @@
+{
+  "id": "c1e88af1-d8d6-417a-b8cb-99395815e7d4",
+  "prevId": "00000000-0000-0000-0000-000000000000",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.attestations": {
+      "name": "attestations",
+      "schema": "",
+      "columns": {
+        "digest": {
+          "name": "digest",
+          "type": "varchar(66)",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "operation_id": {
+          "name": "operation_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "pact_record_id": {
+          "name": "pact_record_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "job_key": {
+          "name": "job_key",
+          "type": "varchar(66)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "evidence_hash": {
+          "name": "evidence_hash",
+          "type": "varchar(66)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "signer": {
+          "name": "signer",
+          "type": "varchar(42)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "chain_id": {
+          "name": "chain_id",
+          "type": "varchar(78)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "verifying_contract": {
+          "name": "verifying_contract",
+          "type": "varchar(42)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "commerce_contract": {
+          "name": "commerce_contract",
+          "type": "varchar(42)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "job_id": {
+          "name": "job_id",
+          "type": "varchar(78)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "condition_hash": {
+          "name": "condition_hash",
+          "type": "varchar(66)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "satisfied_at": {
+          "name": "satisfied_at",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "verified_at": {
+          "name": "verified_at",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "valid_until": {
+          "name": "valid_until",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "signature": {
+          "name": "signature",
+          "type": "varchar(132)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "active": {
+          "name": "active",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "attestations_one_active_per_pact_uq": {
+          "name": "attestations_one_active_per_pact_uq",
+          "columns": [
+            {
+              "expression": "pact_record_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"attestations\".\"active\" = true",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "attestations_job_key_idx": {
+          "name": "attestations_job_key_idx",
+          "columns": [
+            {
+              "expression": "job_key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "attestations_operation_id_operations_id_fk": {
+          "name": "attestations_operation_id_operations_id_fk",
+          "tableFrom": "attestations",
+          "tableTo": "operations",
+          "columnsFrom": ["operation_id"],
+          "columnsTo": ["id"],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "attestations_pact_record_id_pact_records_id_fk": {
+          "name": "attestations_pact_record_id_pact_records_id_fk",
+          "tableFrom": "attestations",
+          "tableTo": "pact_records",
+          "columnsFrom": ["pact_record_id"],
+          "columnsTo": ["id"],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "attestations_evidence_hash_evidence_records_evidence_hash_fk": {
+          "name": "attestations_evidence_hash_evidence_records_evidence_hash_fk",
+          "tableFrom": "attestations",
+          "tableTo": "evidence_records",
+          "columnsFrom": ["evidence_hash"],
+          "columnsTo": ["evidence_hash"],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "attestations_operation_id_unique": {
+          "name": "attestations_operation_id_unique",
+          "nullsNotDistinct": false,
+          "columns": ["operation_id"]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "attestations_time_order_valid": {
+          "name": "attestations_time_order_valid",
+          "value": "\"attestations\".\"satisfied_at\"::numeric <= \"attestations\".\"verified_at\"::numeric and \"attestations\".\"verified_at\"::numeric <= \"attestations\".\"valid_until\"::numeric"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.chain_reconciliations": {
+      "name": "chain_reconciliations",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "operation_id": {
+          "name": "operation_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "attempt_number": {
+          "name": "attempt_number",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "outcome": {
+          "name": "outcome",
+          "type": "varchar(24)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "code": {
+          "name": "code",
+          "type": "varchar(80)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "block_number": {
+          "name": "block_number",
+          "type": "varchar(78)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "block_hash": {
+          "name": "block_hash",
+          "type": "varchar(66)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "block_timestamp": {
+          "name": "block_timestamp",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "chain_id": {
+          "name": "chain_id",
+          "type": "varchar(78)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "pact_evaluator": {
+          "name": "pact_evaluator",
+          "type": "varchar(42)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "commerce_contract": {
+          "name": "commerce_contract",
+          "type": "varchar(42)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "job_id": {
+          "name": "job_id",
+          "type": "varchar(78)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "job_key": {
+          "name": "job_key",
+          "type": "varchar(66)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "binding_exists": {
+          "name": "binding_exists",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "binding_condition_hash": {
+          "name": "binding_condition_hash",
+          "type": "varchar(66)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "binding_completion_deadline": {
+          "name": "binding_completion_deadline",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "binding_verifier": {
+          "name": "binding_verifier",
+          "type": "varchar(42)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "binding_accepted": {
+          "name": "binding_accepted",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "verifier_revoked": {
+          "name": "verifier_revoked",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "job_client": {
+          "name": "job_client",
+          "type": "varchar(42)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "job_provider": {
+          "name": "job_provider",
+          "type": "varchar(42)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "job_evaluator": {
+          "name": "job_evaluator",
+          "type": "varchar(42)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "job_status": {
+          "name": "job_status",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "job_expired_at": {
+          "name": "job_expired_at",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "chain_reconciliations_sequence_uq": {
+          "name": "chain_reconciliations_sequence_uq",
+          "columns": [
+            {
+              "expression": "operation_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "attempt_number",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "chain_reconciliations_operation_idx": {
+          "name": "chain_reconciliations_operation_idx",
+          "columns": [
+            {
+              "expression": "operation_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "chain_reconciliations_operation_id_operations_id_fk": {
+          "name": "chain_reconciliations_operation_id_operations_id_fk",
+          "tableFrom": "chain_reconciliations",
+          "tableTo": "operations",
+          "columnsFrom": ["operation_id"],
+          "columnsTo": ["id"],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "chain_reconciliation_outcome_valid": {
+          "name": "chain_reconciliation_outcome_valid",
+          "value": "\"chain_reconciliations\".\"outcome\" in ('READY','RETRYABLE','INVALID')"
+        },
+        "chain_reconciliation_job_status_valid": {
+          "name": "chain_reconciliation_job_status_valid",
+          "value": "\"chain_reconciliations\".\"job_status\" between 0 and 5"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.evidence_records": {
+      "name": "evidence_records",
+      "schema": "",
+      "columns": {
+        "evidence_hash": {
+          "name": "evidence_hash",
+          "type": "varchar(66)",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "schema_version": {
+          "name": "schema_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "condition_hash": {
+          "name": "condition_hash",
+          "type": "varchar(66)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "repository": {
+          "name": "repository",
+          "type": "varchar(140)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "pull_request": {
+          "name": "pull_request",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "base_branch": {
+          "name": "base_branch",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "merge_commit_sha": {
+          "name": "merge_commit_sha",
+          "type": "varchar(42)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "merged_at": {
+          "name": "merged_at",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "observed_at": {
+          "name": "observed_at",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "evidence_records_pr_positive": {
+          "name": "evidence_records_pr_positive",
+          "value": "\"evidence_records\".\"pull_request\" > 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.github_deliveries": {
+      "name": "github_deliveries",
+      "schema": "",
+      "columns": {
+        "delivery_id": {
+          "name": "delivery_id",
+          "type": "varchar(36)",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "event": {
+          "name": "event",
+          "type": "varchar(64)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "action": {
+          "name": "action",
+          "type": "varchar(64)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "repository": {
+          "name": "repository",
+          "type": "varchar(140)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "pull_request": {
+          "name": "pull_request",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "signature_valid": {
+          "name": "signature_valid",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "processing_state": {
+          "name": "processing_state",
+          "type": "varchar(32)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "matched_pacts": {
+          "name": "matched_pacts",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "received_at": {
+          "name": "received_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "processed_at": {
+          "name": "processed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "github_deliveries_signature_valid": {
+          "name": "github_deliveries_signature_valid",
+          "value": "\"github_deliveries\".\"signature_valid\" = true"
+        },
+        "github_deliveries_processing_state_valid": {
+          "name": "github_deliveries_processing_state_valid",
+          "value": "\"github_deliveries\".\"processing_state\" in ('RECEIVED','IGNORED','ENQUEUED','NO_NEW_OPERATION')"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.operations": {
+      "name": "operations",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "pact_record_id": {
+          "name": "pact_record_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "trigger_kind": {
+          "name": "trigger_kind",
+          "type": "varchar(24)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "trigger_key": {
+          "name": "trigger_key",
+          "type": "varchar(128)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "state": {
+          "name": "state",
+          "type": "varchar(40)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "code": {
+          "name": "code",
+          "type": "varchar(80)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "retryable": {
+          "name": "retryable",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "retry_after_at": {
+          "name": "retry_after_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "version": {
+          "name": "version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "operations_trigger_uq": {
+          "name": "operations_trigger_uq",
+          "columns": [
+            {
+              "expression": "pact_record_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "trigger_kind",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "trigger_key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "operations_one_active_per_pact_uq": {
+          "name": "operations_one_active_per_pact_uq",
+          "columns": [
+            {
+              "expression": "pact_record_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"operations\".\"state\" in ('PENDING','VERIFYING_GITHUB','VERIFIED','RECONCILING_CHAIN','READY_TO_SIGN','SIGNING','READY_TO_RELAY')",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "operations_state_idx": {
+          "name": "operations_state_idx",
+          "columns": [
+            {
+              "expression": "state",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "updated_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "operations_pact_record_id_pact_records_id_fk": {
+          "name": "operations_pact_record_id_pact_records_id_fk",
+          "tableFrom": "operations",
+          "tableTo": "pact_records",
+          "columnsFrom": ["pact_record_id"],
+          "columnsTo": ["id"],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "operations_version_nonnegative": {
+          "name": "operations_version_nonnegative",
+          "value": "\"operations\".\"version\" >= 0"
+        },
+        "operations_trigger_kind_valid": {
+          "name": "operations_trigger_kind_valid",
+          "value": "\"operations\".\"trigger_kind\" in ('GITHUB_WEBHOOK','MANUAL','RECOVERY')"
+        },
+        "operations_state_valid": {
+          "name": "operations_state_valid",
+          "value": "\"operations\".\"state\" in ('PENDING','VERIFYING_GITHUB','NOT_SATISFIED_RETRYABLE','NOT_SATISFIED_TERMINAL','INDETERMINATE','VERIFIED','RECONCILING_CHAIN','CHAIN_RETRYABLE','CHAIN_INVALID','READY_TO_SIGN','SIGNING','READY_TO_RELAY','ALREADY_ACCEPTED','EXPIRED','FAILED_DEFINITE')"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.pact_records": {
+      "name": "pact_records",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "chain_id": {
+          "name": "chain_id",
+          "type": "varchar(78)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "commerce_contract": {
+          "name": "commerce_contract",
+          "type": "varchar(42)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "pact_evaluator": {
+          "name": "pact_evaluator",
+          "type": "varchar(42)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "job_id": {
+          "name": "job_id",
+          "type": "varchar(78)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "job_key": {
+          "name": "job_key",
+          "type": "varchar(66)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "condition_schema_version": {
+          "name": "condition_schema_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "condition_provider": {
+          "name": "condition_provider",
+          "type": "varchar(16)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "condition_repository": {
+          "name": "condition_repository",
+          "type": "varchar(140)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "condition_pull_request": {
+          "name": "condition_pull_request",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "condition_base_branch": {
+          "name": "condition_base_branch",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "condition_event": {
+          "name": "condition_event",
+          "type": "varchar(32)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "condition_hash": {
+          "name": "condition_hash",
+          "type": "varchar(66)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "completion_deadline": {
+          "name": "completion_deadline",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "pact_records_chain_job_uq": {
+          "name": "pact_records_chain_job_uq",
+          "columns": [
+            {
+              "expression": "chain_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "pact_evaluator",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "commerce_contract",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "job_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "pact_records_job_key_uq": {
+          "name": "pact_records_job_key_uq",
+          "columns": [
+            {
+              "expression": "job_key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "pact_records_github_lookup_idx": {
+          "name": "pact_records_github_lookup_idx",
+          "columns": [
+            {
+              "expression": "condition_repository",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "condition_pull_request",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "pact_records_pr_positive": {
+          "name": "pact_records_pr_positive",
+          "value": "\"pact_records\".\"condition_pull_request\" > 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.verification_attempts": {
+      "name": "verification_attempts",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "operation_id": {
+          "name": "operation_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "attempt_number": {
+          "name": "attempt_number",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "observed_at": {
+          "name": "observed_at",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "result_status": {
+          "name": "result_status",
+          "type": "varchar(24)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "reason": {
+          "name": "reason",
+          "type": "varchar(80)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "retryable": {
+          "name": "retryable",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "retry_after_seconds": {
+          "name": "retry_after_seconds",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "rate_limit_remaining": {
+          "name": "rate_limit_remaining",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "rate_limit_reset_at": {
+          "name": "rate_limit_reset_at",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "evidence_hash": {
+          "name": "evidence_hash",
+          "type": "varchar(66)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "verification_attempts_sequence_uq": {
+          "name": "verification_attempts_sequence_uq",
+          "columns": [
+            {
+              "expression": "operation_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "attempt_number",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "verification_attempts_operation_idx": {
+          "name": "verification_attempts_operation_idx",
+          "columns": [
+            {
+              "expression": "operation_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "verification_attempts_operation_id_operations_id_fk": {
+          "name": "verification_attempts_operation_id_operations_id_fk",
+          "tableFrom": "verification_attempts",
+          "tableTo": "operations",
+          "columnsFrom": ["operation_id"],
+          "columnsTo": ["id"],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "verification_attempts_evidence_hash_evidence_records_evidence_hash_fk": {
+          "name": "verification_attempts_evidence_hash_evidence_records_evidence_hash_fk",
+          "tableFrom": "verification_attempts",
+          "tableTo": "evidence_records",
+          "columnsFrom": ["evidence_hash"],
+          "columnsTo": ["evidence_hash"],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "verification_attempt_number_positive": {
+          "name": "verification_attempt_number_positive",
+          "value": "\"verification_attempts\".\"attempt_number\" > 0"
+        },
+        "verification_result_status_valid": {
+          "name": "verification_result_status_valid",
+          "value": "\"verification_attempts\".\"result_status\" in ('SATISFIED','NOT_SATISFIED','INDETERMINATE')"
+        }
+      },
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {},
+  "schemas": {},
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}

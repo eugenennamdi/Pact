@@ -1,0 +1,9 @@
+.firecrawl
+.next
+coverage
+dist
+node_modules
+package-lock.json
+packages/contracts/cache
+packages/contracts/lib
+packages/contracts/out

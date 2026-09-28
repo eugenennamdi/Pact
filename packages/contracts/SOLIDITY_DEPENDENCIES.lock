@@ -1,0 +1,5 @@
+openzeppelin-contracts v5.6.1
+commit 5fd1781b1454fd1ef8e722282f86f9293cacf256
+source https://github.com/OpenZeppelin/openzeppelin-contracts
+ECDSA.sol sha256 ba7c2d314fcd61c9783e0b3f0c664d004b76b408fda6a84edc8267d17c5012d6
+EIP712.sol sha256 2845caaaf70757b6cce612ae4ffbec2c382cb3d1cb9765c98fa649c0f5f1c794

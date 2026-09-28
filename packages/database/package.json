@@ -1,0 +1,25 @@
+{
+  "name": "@pact/database",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "db:generate": "drizzle-kit generate --config=drizzle.config.ts",
+    "db:migrate": "drizzle-kit migrate --config=drizzle.config.ts",
+    "db:check": "drizzle-kit check --config=drizzle.config.ts",
+    "test:live": "node dist/live-test.js"
+  },
+  "dependencies": {
+    "@pact/protocol": "0.0.0",
+    "drizzle-orm": "0.45.3",
+    "postgres": "3.4.9",
+    "viem": "2.56.9"
+  },
+  "devDependencies": {
+    "drizzle-kit": "0.31.11"
+  }
+}

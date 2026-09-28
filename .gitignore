@@ -1,0 +1,21 @@
+# Dependencies and generated output
+node_modules/
+.next/
+dist/
+coverage/
+*.tsbuildinfo
+
+# Foundry output
+packages/contracts/cache/
+packages/contracts/out/
+packages/contracts/broadcast/
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+
+# Tool caches and local research artifacts
+.firecrawl/
+.DS_Store
+*.log
