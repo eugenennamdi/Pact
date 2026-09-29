@@ -68,7 +68,8 @@ export interface DeploymentManifest {
   };
   readonly testnetGate?: {
     readonly status: "PASS";
-    readonly gitCommit: string;
+    readonly deploymentGitCommit: string;
+    readonly e2eRuntimeCommit: string;
     readonly erc8183SourceCommit: typeof ERC8183_SOURCE_COMMIT;
     readonly evaluatorCodeHash: Hex;
     readonly completedAt: string;
@@ -212,7 +213,19 @@ export function assertDeploymentManifest(input: unknown): DeploymentManifest {
   if (root.testnetGate !== undefined) {
     const gate = record(root.testnetGate, "testnetGate");
     literal(gate.status, "PASS", "testnetGate.status");
-    literal(gate.gitCommit, gitCommit, "testnetGate.gitCommit");
+    literal(
+      gate.deploymentGitCommit,
+      gitCommit,
+      "testnetGate.deploymentGitCommit",
+    );
+    const e2eRuntimeCommit = string(
+      gate.e2eRuntimeCommit,
+      "testnetGate.e2eRuntimeCommit",
+    );
+    if (!/^[0-9a-f]{40}$/.test(e2eRuntimeCommit))
+      throw new Error(
+        "invalid deployment manifest: testnetGate.e2eRuntimeCommit must be a full lowercase commit hash",
+      );
     literal(
       gate.erc8183SourceCommit,
       ERC8183_SOURCE_COMMIT,
@@ -258,7 +271,7 @@ export function assertMainnetGate(
   )
     throw new Error("MAINNET_BLOCKED_TESTNET_GATE_MISSING");
   if (
-    testnet.testnetGate.gitCommit !== mainnetGitCommit ||
+    testnet.testnetGate.e2eRuntimeCommit !== mainnetGitCommit ||
     testnet.testnetGate.erc8183SourceCommit !== ERC8183_SOURCE_COMMIT ||
     testnet.testnetGate.evaluatorCodeHash.toLowerCase() !==
       evaluatorCodeHash.toLowerCase()

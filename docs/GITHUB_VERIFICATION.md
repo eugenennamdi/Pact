@@ -25,7 +25,7 @@ default timeout, a 256-KiB response limit, no automatic retry, and:
 
 ```text
 Accept: application/vnd.github+json
-X-GitHub-Api-Version: 2026-03-10
+X-GitHub-Api-Version: 2022-11-28
 User-Agent: Pact-Verifier/0.0.0
 Authorization: Bearer <GITHUB_TOKEN>  # only when configured server-side
 ```
@@ -40,6 +40,13 @@ merge-endpoint `404` interpreted as unmerged; a primary `404` is ambiguous and
 `INDETERMINATE`. A positive result requires merge endpoint `204`, metadata
 `merged == true`, state `closed`, and non-null valid `merged_at` and full 40-hex
 `merge_commit_sha`. Disagreement is `INDETERMINATE`.
+
+This older REST contract is intentional and code-pinned. Pact Evidence V1
+commits to `mergeCommitSha`, while GitHub REST `2026-03-10` removed
+`merge_commit_sha` from pull-request response objects. GitHub still supports
+`2022-11-28`; Pact does not silently fall back between versions. Before that
+version sunsets, a reviewed evidence/API migration is required. A missing or
+malformed SHA remains `INDETERMINATE`, never `SATISFIED`.
 
 `merge_commit_sha` before merge may be a temporary mergeability commit, so Pact
 ignores it until the dedicated endpoint confirms merge. Merge, squash, and

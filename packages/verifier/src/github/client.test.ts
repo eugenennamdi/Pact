@@ -5,8 +5,10 @@ import {
   GITHUB_API_BASE_URL,
   GITHUB_API_VERSION,
   GITHUB_USER_AGENT,
+  PACT_GITHUB_REST_API_VERSION,
   createGitHubPullRequestClient,
 } from "./client.js";
+import { verifyGitHubPrMerged } from "./verify.js";
 
 const pull = {
   number: 81,
@@ -21,6 +23,11 @@ const pull = {
 };
 
 describe("GitHub pull request client", () => {
+  it("code-pins the supported Evidence V1 compatibility contract", () => {
+    expect(PACT_GITHUB_REST_API_VERSION).toBe("2022-11-28");
+    expect(GITHUB_API_VERSION).toBe(PACT_GITHUB_REST_API_VERSION);
+  });
+
   it("pins the endpoint, version, headers, credentials, and redirect policy", async () => {
     const request = vi.fn<typeof fetch>().mockResolvedValue(
       new Response(JSON.stringify(pull), {
@@ -68,6 +75,62 @@ describe("GitHub pull request client", () => {
     await expect(
       unmerged.checkPullRequestMerged("pact-protocol/demo", 81),
     ).resolves.toEqual({ ok: true, value: { merged: false } });
+  });
+
+  it("never satisfies a 2026-03-10 response with merge_commit_sha removed", async () => {
+    const withoutMergeSha = { ...pull } as Partial<typeof pull>;
+    delete withoutMergeSha.merge_commit_sha;
+    const request = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(withoutMergeSha), { status: 200 }),
+      )
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+    const client = createGitHubPullRequestClient({ fetch: request });
+    await expect(
+      verifyGitHubPrMerged({
+        condition: {
+          provider: "github",
+          repository: "pact-protocol/demo",
+          pullRequest: 81,
+          baseBranch: "main",
+          event: "PR_MERGED",
+        },
+        completionDeadline: 1_900_000_000n,
+        observedAt: 1_800_000_100n,
+        client,
+      }),
+    ).resolves.toEqual({
+      status: "INDETERMINATE",
+      reason: "GITHUB_INVALID_RESPONSE",
+      retryable: false,
+    });
+    expect(request).toHaveBeenCalledOnce();
+  });
+
+  it("satisfies a valid 2022-11-28 response only with merge endpoint agreement", async () => {
+    const request = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(pull), { status: 200 }),
+      )
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+    const client = createGitHubPullRequestClient({ fetch: request });
+    await expect(
+      verifyGitHubPrMerged({
+        condition: {
+          provider: "github",
+          repository: "pact-protocol/demo",
+          pullRequest: 81,
+          baseBranch: "main",
+          event: "PR_MERGED",
+        },
+        completionDeadline: 1_900_000_000n,
+        observedAt: 1_800_000_100n,
+        client,
+      }),
+    ).resolves.toMatchObject({ status: "SATISFIED" });
+    expect(request).toHaveBeenCalledTimes(2);
   });
 
   it.each([

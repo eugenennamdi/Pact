@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "status": "DEPLOYED",
+  "network": "arc-testnet",
+  "chainId": "5042002",
+  "deploymentTimestamp": "2026-09-29T20:08:25.860Z",
+  "deploymentBlock": "64662157",
+  "deployer": "0x3D147Ba64053bA3b0C23B16f538d6Eb73B923841",
+  "gitCommit": "5e9214f996ef48bc465ca2ee6a4f8e30d782a362",
+  "usdc": {
+    "address": "0x3600000000000000000000000000000000000000",
+    "decimals": 6
+  },
+  "erc8183": {
+    "classification": "PACT_MANAGED_PINNED",
+    "proxy": "0x803c90536c0258f4882f62B7e672223331423Dae",
+    "implementation": "0xDf058f9a150875A8e8532d6302f389B1B06d3411",
+    "proxyCodeHash": "0xd8213adf7f6483871a80a460216b7cd380d7c406ae464724918f93cf25acbe7e",
+    "implementationCodeHash": "0xb9ec629eee41a3b0d6d13aeb7fe0668a302ec3c89c369fabfc08a8d232537b2f",
+    "sourceCommit": "142e669c1fd318486a4628395b629f033654dd06",
+    "normativeRevision": "a078cab5cc8e9581c15f76c091ed96eed28f02f7",
+    "defaultAdmin": "0x3D147Ba64053bA3b0C23B16f538d6Eb73B923841",
+    "admin": "0x3D147Ba64053bA3b0C23B16f538d6Eb73B923841",
+    "treasury": "0xeD7E3407a93B056a09F5dC184aD6ae638ef80351",
+    "platformFeeBps": "0",
+    "evaluatorFeeBps": "0",
+    "paused": false,
+    "paymentTokenAllowed": true,
+    "hookPolicy": "NONE"
+  },
+  "pactEvaluator": {
+    "address": "0xEbF707589fa4dC68A2D5fFCf61D6362382853916",
+    "codeHash": "0x2dc026033b0a08ae8be23d2eb1bde4dc17808ca5f314841dd2ef7996f34f7a25",
+    "artifactBytecodeHash": "0xd965f1c6b1574e32ca258e300558eb37bfef0ec253c0a02a4ebf7d05a546b487",
+    "commerceContract": "0x803c90536c0258f4882f62B7e672223331423Dae",
+    "verifier": "0x72DA36d41D7C81785aD026F724FD93Db65f830A9",
+    "admin": "0x3D147Ba64053bA3b0C23B16f538d6Eb73B923841",
+    "domainVersion": "2"
+  },
+  "toolchain": {
+    "solidity": "0.8.28",
+    "evmTarget": "cancun",
+    "foundryVersion": "v1.8.3",
+    "openZeppelinVersion": "5.6.1",
+    "viemVersion": "2.56.9"
+  },
+  "deploymentTransactions": {
+    "implementation": "0x60b3172c4afbb9d3fea493be27515c0a93b9535d97e11ae8449dc31895201648",
+    "proxy": "0x38a083cc233dd542fd8325a7138ad8c32314fc72e6f9f416fb4d76c7471abb8e",
+    "allowUsdc": "0xab57d0c338464b60197e0db4c59dbfa05e05dae5dbc297e2f00de277deeea1c2",
+    "evaluator": "0xd0d91860ed17a9b9a095408fa113541acc5881ee54ed8dad1279ed9573271cc4"
+  },
+  "sourceVerification": {
+    "erc8183Implementation": "UNAVAILABLE",
+    "erc8183Proxy": "UNAVAILABLE",
+    "pactEvaluator": "UNAVAILABLE"
+  }
+}

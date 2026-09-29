@@ -43,8 +43,10 @@ import {
 } from "./manifest.js";
 import {
   assertControlledE2EAmount,
-  assertZeroFeeEconomicAccounting,
+  assertGrossZeroFeeSettlement,
+  calculateGasFee,
   parseUsdcBaseUnits,
+  reconcileArcNativeBalance,
 } from "./safety.js";
 import {
   executeDeploymentTransaction,
@@ -73,6 +75,16 @@ const jobCompletedEvent = {
     { name: "jobId", type: "uint256", indexed: true },
     { name: "evaluator", type: "address", indexed: true },
     { name: "reason", type: "bytes32", indexed: false },
+  ],
+} as const;
+const transferEvent = {
+  type: "event",
+  name: "Transfer",
+  anonymous: false,
+  inputs: [
+    { name: "from", type: "address", indexed: true },
+    { name: "to", type: "address", indexed: true },
+    { name: "value", type: "uint256", indexed: false },
   ],
 } as const;
 
@@ -166,8 +178,31 @@ async function main(): Promise<void> {
     cwd: repositoryRoot,
     encoding: "utf8",
   }).trim();
-  if (gitCommit !== manifest.gitCommit)
-    throw new Error("working commit does not match manifest");
+  if (gitCommit !== manifest.gitCommit) {
+    try {
+      execFileSync(
+        "git",
+        [
+          "diff",
+          "--quiet",
+          manifest.gitCommit,
+          gitCommit,
+          "--",
+          "packages/contracts",
+        ],
+        { cwd: repositoryRoot },
+      );
+    } catch (error) {
+      if (
+        typeof error === "object" &&
+        error !== null &&
+        "status" in error &&
+        error.status === 1
+      )
+        throw new Error("deployed contract source differs from manifest");
+      throw error;
+    }
+  }
   if (
     manifest.network === "arc-mainnet" &&
     required("PACT_MAINNET_E2E_APPROVAL") !== `APPROVED ${gitCommit}`
@@ -345,7 +380,7 @@ async function main(): Promise<void> {
   if (created.length !== 1 || created[0] === undefined)
     throw new Error("canonical JobCreated event missing");
   const jobId = created[0].args.jobId;
-  await send(
+  const bind = await send(
     "e2e-bind-condition",
     clientAccount,
     manifest.pactEvaluator.address,
@@ -355,7 +390,7 @@ async function main(): Promise<void> {
       args: [jobId, conditionHash, completionDeadline, verifierAccount.address],
     }),
   );
-  await send(
+  const setBudget = await send(
     "e2e-set-budget",
     providerAccount,
     manifest.erc8183.proxy,
@@ -365,7 +400,7 @@ async function main(): Promise<void> {
       args: [jobId, manifest.usdc.address, amount, "0x"],
     }),
   );
-  await send(
+  const approve = await send(
     "e2e-approve-usdc",
     clientAccount,
     manifest.usdc.address,
@@ -375,7 +410,7 @@ async function main(): Promise<void> {
       args: [manifest.erc8183.proxy, amount],
     }),
   );
-  await send(
+  const fund = await send(
     "e2e-fund",
     clientAccount,
     manifest.erc8183.proxy,
@@ -385,7 +420,7 @@ async function main(): Promise<void> {
       args: [jobId, manifest.usdc.address, amount, "0x"],
     }),
   );
-  await send(
+  const submit = await send(
     "e2e-submit",
     providerAccount,
     manifest.erc8183.proxy,
@@ -395,6 +430,12 @@ async function main(): Promise<void> {
       args: [jobId, conditionHash, "0x"],
     }),
   );
+  const jobBeforeCompletion = (await publicClient.readContract({
+    address: manifest.erc8183.proxy,
+    abi: erc8183.abi,
+    functionName: "getJob",
+    args: [jobId],
+  })) as { readonly budget: bigint; readonly settledAmount: bigint };
 
   const database = createPactDatabaseFromEnv(process.env);
   try {
@@ -421,7 +462,7 @@ async function main(): Promise<void> {
       await pactRepository.createPact(pact);
     const operation = await pactRepository.enqueueManualOperation(
       state.pactId,
-      `phase5:${jobKey}`,
+      `phase5:${jobKey}:${gitCommit}`,
     );
     const github = createGitHubPullRequestClient({
       ...(process.env.GITHUB_TOKEN === undefined
@@ -494,17 +535,199 @@ async function main(): Promise<void> {
       balance(manifest.pactEvaluator.address),
       publicClient.getBalance({ address: relayAccount.address }),
     ]);
-    assertZeroFeeEconomicAccounting(amount, {
-      clientBefore: BigInt(state.clientBefore),
-      clientAfter: after[0],
-      providerBefore: BigInt(state.providerBefore),
-      providerAfter: after[1],
+    const finalJob = (await publicClient.readContract({
+      address: manifest.erc8183.proxy,
+      abi: erc8183.abi,
+      functionName: "getJob",
+      args: [jobId],
+    })) as {
+      readonly status: number;
+      readonly budget: bigint;
+      readonly settledAmount: bigint;
+    };
+    const fundReceipt = await publicClient.getTransactionReceipt({
+      hash: fund.transactionHash,
+    });
+    const canonicalTransfers = (logs: typeof settlementReceipt.logs) =>
+      parseEventLogs({
+        abi: [transferEvent],
+        logs: logs.filter(
+          (log) =>
+            log.address.toLowerCase() === manifest.usdc.address.toLowerCase(),
+        ),
+        eventName: "Transfer",
+        strict: true,
+      });
+    const transferTotal = (
+      logs: ReturnType<typeof canonicalTransfers>,
+      from: Address,
+      to: Address,
+    ) =>
+      logs
+        .filter(
+          (log) =>
+            log.args.from.toLowerCase() === from.toLowerCase() &&
+            log.args.to.toLowerCase() === to.toLowerCase(),
+        )
+        .reduce((total, log) => total + log.args.value, 0n);
+    const fundingTransfers = canonicalTransfers(fundReceipt.logs);
+    const settlementTransfers = canonicalTransfers(settlementReceipt.logs);
+    const fundingTransferToEscrow = transferTotal(
+      fundingTransfers,
+      clientAccount.address,
+      manifest.erc8183.proxy,
+    );
+    const providerPayoutFromEscrow = transferTotal(
+      settlementTransfers,
+      manifest.erc8183.proxy,
+      providerAccount.address,
+    );
+    const treasuryApplicationTransfer = transferTotal(
+      settlementTransfers,
+      manifest.erc8183.proxy,
+      manifest.erc8183.treasury,
+    );
+    const evaluatorApplicationTransfer = transferTotal(
+      settlementTransfers,
+      manifest.erc8183.proxy,
+      manifest.pactEvaluator.address,
+    );
+    assertGrossZeroFeeSettlement({
+      expectedBudget: amount,
+      jobBudget: finalJob.budget,
+      settledAmountBeforeCompletion: jobBeforeCompletion.settledAmount,
+      settledAmountAfterCompletion: finalJob.settledAmount,
+      jobStatus: finalJob.status,
+      fundingTransferToEscrow,
+      providerPayoutFromEscrow,
+      treasuryApplicationTransfer,
+      evaluatorApplicationTransfer,
       escrowBefore: BigInt(state.escrowBefore),
       escrowAfter: after[2],
-      treasuryBefore: BigInt(state.treasuryBefore),
-      treasuryAfter: after[3],
-      evaluatorBefore: BigInt(state.evaluatorBefore),
-      evaluatorAfter: after[4],
+    });
+    const receiptGas = async (transactionHash: Hex) => {
+      const receipt = await publicClient.getTransactionReceipt({
+        hash: transactionHash,
+      });
+      const gasFee = calculateGasFee({
+        gasUsed: receipt.gasUsed,
+        effectiveGasPrice: receipt.effectiveGasPrice,
+      });
+      return {
+        transactionHash,
+        gasUsed: receipt.gasUsed.toString(),
+        effectiveGasPrice: receipt.effectiveGasPrice.toString(),
+        gasFee: gasFee.toString(),
+      };
+    };
+    const gasGroup = async (hashes: readonly Hex[]) => {
+      const transactions = await Promise.all(hashes.map(receiptGas));
+      return {
+        totalGasFee: transactions
+          .reduce(
+            (total, transaction) => total + BigInt(transaction.gasFee),
+            0n,
+          )
+          .toString(),
+        transactions,
+      };
+    };
+    const gasAccounting = {
+      deployer: await gasGroup([
+        manifest.deploymentTransactions.implementation,
+        manifest.deploymentTransactions.proxy,
+        manifest.deploymentTransactions.allowUsdc,
+        manifest.deploymentTransactions.evaluator,
+      ]),
+      client: await gasGroup([
+        create.transactionHash,
+        bind.transactionHash,
+        approve.transactionHash,
+        fund.transactionHash,
+      ]),
+      provider: await gasGroup([
+        setBudget.transactionHash,
+        submit.transactionHash,
+      ]),
+      relay: await gasGroup([submitted.expectedTxHash as Hex]),
+    };
+    const [implementationReceipt, evaluatorDeploymentReceipt] =
+      await Promise.all([
+        publicClient.getTransactionReceipt({
+          hash: manifest.deploymentTransactions.implementation,
+        }),
+        publicClient.getTransactionReceipt({
+          hash: manifest.deploymentTransactions.evaluator,
+        }),
+      ]);
+    const nativeBalanceWindow = async (
+      address: Address,
+      beforeBlock: bigint,
+      afterBlock: bigint,
+    ) => {
+      const [before, after] = await Promise.all([
+        publicClient.getBalance({ address, blockNumber: beforeBlock }),
+        publicClient.getBalance({ address, blockNumber: afterBlock }),
+      ]);
+      return {
+        before: before.toString(),
+        after: after.toString(),
+        change: (after - before).toString(),
+        beforeBlock: beforeBlock.toString(),
+        afterBlock: afterBlock.toString(),
+      };
+    };
+    const e2eBeforeBlock = createReceipt.blockNumber - 1n;
+    const nativeBalanceDiagnostics = {
+      deployer: await nativeBalanceWindow(
+        manifest.deployer,
+        implementationReceipt.blockNumber - 1n,
+        evaluatorDeploymentReceipt.blockNumber,
+      ),
+      client: await nativeBalanceWindow(
+        clientAccount.address,
+        e2eBeforeBlock,
+        settlementReceipt.blockNumber,
+      ),
+      provider: await nativeBalanceWindow(
+        providerAccount.address,
+        e2eBeforeBlock,
+        settlementReceipt.blockNumber,
+      ),
+      relay: await nativeBalanceWindow(
+        relayAccount.address,
+        e2eBeforeBlock,
+        settlementReceipt.blockNumber,
+      ),
+      treasury: {
+        classification: "PASSIVE_NO_CONTROLLED_TRANSACTIONS",
+        totalGasFee: "0",
+      },
+      evaluator: {
+        classification: "CONTRACT_NOT_GAS_PAYING_EOA",
+        totalGasFee: "0",
+      },
+    };
+    reconcileArcNativeBalance({
+      nativeBefore: BigInt(nativeBalanceDiagnostics.client.before),
+      nativeAfter: BigInt(nativeBalanceDiagnostics.client.after),
+      applicationInflows: 0n,
+      applicationOutflows: fundingTransferToEscrow,
+      gasFees: BigInt(gasAccounting.client.totalGasFee),
+    });
+    reconcileArcNativeBalance({
+      nativeBefore: BigInt(nativeBalanceDiagnostics.provider.before),
+      nativeAfter: BigInt(nativeBalanceDiagnostics.provider.after),
+      applicationInflows: providerPayoutFromEscrow,
+      applicationOutflows: 0n,
+      gasFees: BigInt(gasAccounting.provider.totalGasFee),
+    });
+    reconcileArcNativeBalance({
+      nativeBefore: BigInt(nativeBalanceDiagnostics.relay.before),
+      nativeAfter: BigInt(nativeBalanceDiagnostics.relay.after),
+      applicationInflows: 0n,
+      applicationOutflows: 0n,
+      gasFees: BigInt(gasAccounting.relay.totalGasFee),
     });
     const intent =
       submitted.intentId === undefined
@@ -523,6 +746,31 @@ async function main(): Promise<void> {
       client: clientAccount.address,
       provider: providerAccount.address,
       budget: amount.toString(),
+      grossAccounting: {
+        jobBudget: finalJob.budget.toString(),
+        settledAmount: finalJob.settledAmount.toString(),
+        pinnedCompletePayoutBasis: (
+          finalJob.budget - jobBeforeCompletion.settledAmount
+        ).toString(),
+        fundingTransferToEscrow: fundingTransferToEscrow.toString(),
+        providerPayoutFromEscrow: providerPayoutFromEscrow.toString(),
+        treasuryApplicationTransfer: treasuryApplicationTransfer.toString(),
+        evaluatorApplicationTransfer: evaluatorApplicationTransfer.toString(),
+        escrowBefore: state.escrowBefore,
+        escrowAfter: after[2].toString(),
+      },
+      gasAccounting,
+      nativeBalanceDiagnostics,
+      erc20BalanceDiagnostics: {
+        clientBefore: state.clientBefore,
+        clientAfter: after[0].toString(),
+        providerBefore: state.providerBefore,
+        providerAfter: after[1].toString(),
+        treasuryBefore: state.treasuryBefore,
+        treasuryAfter: after[3].toString(),
+        evaluatorBefore: state.evaluatorBefore,
+        evaluatorAfter: after[4].toString(),
+      },
       relayGasBefore: state.relayGasBefore,
       relayGasAfter: after[5].toString(),
     };
@@ -532,7 +780,8 @@ async function main(): Promise<void> {
         ...manifest,
         testnetGate: {
           status: "PASS",
-          gitCommit,
+          deploymentGitCommit: manifest.gitCommit,
+          e2eRuntimeCommit: gitCommit,
           erc8183SourceCommit: manifest.erc8183.sourceCommit,
           evaluatorCodeHash: evaluatorArtifactHash,
           completedAt: new Date().toISOString(),

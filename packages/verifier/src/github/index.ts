@@ -5,6 +5,7 @@ export {
   GITHUB_API_BASE_URL,
   GITHUB_API_VERSION,
   GITHUB_USER_AGENT,
+  PACT_GITHUB_REST_API_VERSION,
   createGitHubPullRequestClient,
   createGitHubPullRequestClientFromEnv,
   type GitHubClientFailure,

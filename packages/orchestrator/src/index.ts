@@ -97,12 +97,17 @@ export {
   type DeploymentCodeSnapshot,
 } from "./deployment/integrity.js";
 export {
+  ARC_NATIVE_TO_ERC20_SCALE,
   MAINNET_E2E_MAX_USDC_BASE_UNITS,
   assertControlledE2EAmount,
-  assertZeroFeeEconomicAccounting,
+  assertGrossZeroFeeSettlement,
+  arcNativeToErc20Truncated,
   authorizeMainnetRun,
+  calculateGasFee,
   parseUsdcBaseUnits,
-  type EconomicBalances,
+  reconcileArcNativeBalance,
+  type GrossZeroFeeSettlement,
+  type TransactionGas,
 } from "./deployment/safety.js";
 export {
   executeDeploymentTransaction,

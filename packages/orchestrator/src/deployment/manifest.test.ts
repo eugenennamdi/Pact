@@ -70,7 +70,8 @@ function validManifest(): Record<string, unknown> {
     },
     testnetGate: {
       status: "PASS",
-      gitCommit,
+      deploymentGitCommit: gitCommit,
+      e2eRuntimeCommit: "b".repeat(40),
       erc8183SourceCommit: ERC8183_SOURCE_COMMIT,
       evaluatorCodeHash: hash("9"),
       completedAt: "2026-09-29T01:00:00.000Z",
@@ -125,10 +126,17 @@ describe("deployment manifest", () => {
     const manifest = assertDeploymentManifest(validManifest());
     expect(() =>
       assertMainnetGate("b".repeat(40), hash("9"), manifest),
-    ).toThrow("MAINNET_BLOCKED_ARTIFACT_DRIFT");
+    ).not.toThrow();
     expect(() =>
       assertMainnetGate("a".repeat(40), hash("8"), manifest),
     ).toThrow("MAINNET_BLOCKED_ARTIFACT_DRIFT");
+  });
+
+  it("records deployment and corrected E2E runtime provenance separately", () => {
+    const manifest = assertDeploymentManifest(validManifest());
+    expect(manifest.gitCommit).toBe("a".repeat(40));
+    expect(manifest.testnetGate?.deploymentGitCommit).toBe("a".repeat(40));
+    expect(manifest.testnetGate?.e2eRuntimeCommit).toBe("b".repeat(40));
   });
 
   it("fails closed on runtime bytecode or EIP-1967 implementation drift", () => {

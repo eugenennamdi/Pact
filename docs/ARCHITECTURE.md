@@ -470,7 +470,7 @@ Pact's immutable offchain evidence.
 
 The exact encoding and fixed vector are published in
 `GITHUB_EVIDENCE_V1_VECTOR.md`. The implemented verifier uses the pinned GitHub
-REST API version `2026-03-10`, manually rejects redirects, obtains PR metadata
+REST API version `2022-11-28`, manually rejects redirects, obtains PR metadata
 and the dedicated merge check independently, and signs only when they agree. See
 `GITHUB_VERIFICATION.md` for the HTTP, failure, clock, and signer contracts.
 

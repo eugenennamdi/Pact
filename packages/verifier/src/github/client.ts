@@ -1,5 +1,12 @@
 export const GITHUB_API_BASE_URL = "https://api.github.com" as const;
-export const GITHUB_API_VERSION = "2026-03-10" as const;
+/**
+ * Evidence V1 commits to GitHub's canonical mergeCommitSha. GitHub REST
+ * 2026-03-10 removed merge_commit_sha from pull-request response objects, so
+ * Pact intentionally pins the still-supported 2022-11-28 contract. A future
+ * reviewed evidence migration is required before this version sunsets.
+ */
+export const PACT_GITHUB_REST_API_VERSION = "2022-11-28" as const;
+export const GITHUB_API_VERSION = PACT_GITHUB_REST_API_VERSION;
 export const GITHUB_ACCEPT = "application/vnd.github+json" as const;
 export const GITHUB_USER_AGENT = "Pact-Verifier/0.0.0" as const;
 export const DEFAULT_GITHUB_TIMEOUT_MS = 5_000;
@@ -225,7 +232,7 @@ export function createGitHubPullRequestClient(
   const headers: Record<string, string> = {
     Accept: GITHUB_ACCEPT,
     "User-Agent": userAgent,
-    "X-GitHub-Api-Version": GITHUB_API_VERSION,
+    "X-GitHub-Api-Version": PACT_GITHUB_REST_API_VERSION,
   };
   if (options.token !== undefined && options.token.length > 0) {
     headers.Authorization = `Bearer ${options.token}`;

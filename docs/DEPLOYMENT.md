@@ -114,7 +114,10 @@ GitHub through the production client, and settles only through the persisted
 Phase 4A → Phase 4B path. It refuses a verifier/relay collision, non-integer
 amount, Mainnet amount over 0.10 USDC, release drift, or a state/journal path
 inside the repository. On a complete Testnet pass it atomically adds the
-version-bound `testnetGate` record to the existing manifest.
+version-bound `testnetGate` record to the existing manifest. The root
+`gitCommit` (and gate `deploymentGitCommit`) identifies the source that produced
+the deployed contracts; `e2eRuntimeCommit` separately identifies the corrected
+backend/verifier code that ran the rehearsal.
 
 1. Create the ERC-8183 job with PactEvaluator as evaluator and a finite expiry.
 2. Bind the canonical `PR_MERGED` condition while the job is `Open`.
@@ -126,8 +129,11 @@ version-bound `testnetGate` record to the existing manifest.
    exact signed attestation before relay.
 6. Relay with the existing durable Phase 4B state machine; reconcile receipt and
    `PactCompletionAccepted`/ERC-8183 completion events.
-7. Prove client delta equals budget, provider delta equals budget, escrow
-   returns to its baseline, and treasury/evaluator deltas are zero.
+7. Prove the gross canonical USDC funding and provider payout transfers equal
+   the budget, the pinned job state is completed, escrow returns to baseline,
+   and treasury/evaluator application transfers are zero. Record transaction gas
+   separately in Arc's 18-decimal native accounting; six-decimal `balanceOf`
+   deltas are diagnostics, not payout proof.
 
 Only after all evidence, hashes, transaction IDs, event coordinates, and balance
 snapshots are recorded may an operator add the manifest `testnetGate` PASS
@@ -136,7 +142,7 @@ object. A failed, unavailable, or incomplete check leaves the phase blocked.
 ## Mainnet gate
 
 Mainnet is not a retry of Testnet. It requires explicit Tech Lead approval and a
-Testnet PASS manifest whose Git commit, ERC-8183 source commit, and
+Testnet PASS manifest whose E2E runtime commit, ERC-8183 source commit, and
 PactEvaluator creation-artifact hash exactly match the Mainnet release. The
 command enforces this identity. The controlled Mainnet E2E amount has a
 non-configurable ceiling of `100000` base units (0.10 USDC); lowering it is

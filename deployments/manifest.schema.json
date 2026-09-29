@@ -144,7 +144,8 @@
       "additionalProperties": false,
       "required": [
         "status",
-        "gitCommit",
+        "deploymentGitCommit",
+        "e2eRuntimeCommit",
         "erc8183SourceCommit",
         "evaluatorCodeHash",
         "completedAt",
@@ -152,7 +153,14 @@
       ],
       "properties": {
         "status": { "const": "PASS" },
-        "gitCommit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "deploymentGitCommit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "e2eRuntimeCommit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
         "erc8183SourceCommit": {
           "const": "142e669c1fd318486a4628395b629f033654dd06"
         },

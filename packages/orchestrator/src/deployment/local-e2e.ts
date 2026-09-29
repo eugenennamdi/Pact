@@ -35,7 +35,7 @@ import { createPhase4AOrchestrator } from "../service.js";
 import { createRelayChainClient } from "../relay/chain.js";
 import { createPactRelayService } from "../relay/service.js";
 import { createPactRelaySigner } from "../relay/signer.js";
-import { assertZeroFeeEconomicAccounting } from "./safety.js";
+import { assertGrossZeroFeeSettlement } from "./safety.js";
 
 const ANVIL_PATH = "/Users/apple/.foundry/bin/anvil";
 const CHAIN_ID = 31_337;
@@ -52,6 +52,16 @@ const jobCompletedEvent = {
     { name: "jobId", type: "uint256", indexed: true },
     { name: "evaluator", type: "address", indexed: true },
     { name: "reason", type: "bytes32", indexed: false },
+  ],
+} as const;
+const transferEvent = {
+  type: "event",
+  name: "Transfer",
+  anonymous: false,
+  inputs: [
+    { name: "from", type: "address", indexed: true },
+    { name: "to", type: "address", indexed: true },
+    { name: "value", type: "uint256", indexed: false },
   ],
 } as const;
 
@@ -204,19 +214,7 @@ async function main(): Promise<void> {
         functionName: "balanceOf",
         args: [owner],
       }) as Promise<bigint>;
-    const [
-      clientBefore,
-      providerBefore,
-      escrowBefore,
-      treasuryBefore,
-      evaluatorBefore,
-    ] = await Promise.all([
-      balance(client),
-      balance(provider),
-      balance(commerce),
-      balance(admin),
-      balance(evaluator),
-    ]);
+    const escrowBefore = await balance(commerce);
     const write = async (
       account: Address,
       target: Address,
@@ -278,7 +276,7 @@ async function main(): Promise<void> {
       "0x",
     ]);
     await write(client, usdc, tokenArtifact.abi, "approve", [commerce, BUDGET]);
-    await write(client, commerce, erc8183.abi, "fund", [
+    const fundHash = await write(client, commerce, erc8183.abi, "fund", [
       jobId,
       usdc,
       BUDGET,
@@ -289,6 +287,12 @@ async function main(): Promise<void> {
       conditionHash,
       "0x",
     ]);
+    const jobBeforeCompletion = (await publicClient.readContract({
+      address: commerce,
+      abi: erc8183.abi,
+      functionName: "getJob",
+      args: [jobId],
+    })) as { readonly budget: bigint; readonly settledAmount: bigint };
 
     const now = (await publicClient.getBlock()).timestamp;
     const mergedAt = now - 10n;
@@ -393,37 +397,60 @@ async function main(): Promise<void> {
       artifactForPact.attestation.evidenceHash,
     );
 
-    const [
-      clientAfter,
-      providerAfter,
-      escrowAfter,
-      treasuryAfter,
-      evaluatorAfter,
-    ] = await Promise.all([
-      balance(client),
-      balance(provider),
-      balance(commerce),
-      balance(admin),
-      balance(evaluator),
-    ]);
-    assertZeroFeeEconomicAccounting(BUDGET, {
-      clientBefore,
-      clientAfter,
-      providerBefore,
-      providerAfter,
-      escrowBefore,
-      escrowAfter,
-      treasuryBefore,
-      treasuryAfter,
-      evaluatorBefore,
-      evaluatorAfter,
-    });
+    const escrowAfter = await balance(commerce);
     const job = (await publicClient.readContract({
       address: commerce,
       abi: erc8183.abi,
       functionName: "getJob",
       args: [jobId],
-    })) as { readonly status: number };
+    })) as {
+      readonly status: number;
+      readonly budget: bigint;
+      readonly settledAmount: bigint;
+    };
+    const fundReceipt = await publicClient.getTransactionReceipt({
+      hash: fundHash,
+    });
+    const transfers = (logs: typeof receipt.logs) =>
+      parseEventLogs({
+        abi: [transferEvent],
+        logs: logs.filter(
+          (log) => log.address.toLowerCase() === usdc.toLowerCase(),
+        ),
+        eventName: "Transfer",
+        strict: true,
+      });
+    const sum = (
+      logs: ReturnType<typeof transfers>,
+      from: Address,
+      to: Address,
+    ) =>
+      logs
+        .filter(
+          (log) =>
+            log.args.from.toLowerCase() === from.toLowerCase() &&
+            log.args.to.toLowerCase() === to.toLowerCase(),
+        )
+        .reduce((total, log) => total + log.args.value, 0n);
+    const fundingTransfers = transfers(fundReceipt.logs);
+    const settlementTransfers = transfers(receipt.logs);
+    assertGrossZeroFeeSettlement({
+      expectedBudget: BUDGET,
+      jobBudget: job.budget,
+      settledAmountBeforeCompletion: jobBeforeCompletion.settledAmount,
+      settledAmountAfterCompletion: job.settledAmount,
+      jobStatus: job.status,
+      fundingTransferToEscrow: sum(fundingTransfers, client, commerce),
+      providerPayoutFromEscrow: sum(settlementTransfers, commerce, provider),
+      treasuryApplicationTransfer: sum(settlementTransfers, commerce, admin),
+      evaluatorApplicationTransfer: sum(
+        settlementTransfers,
+        commerce,
+        evaluator,
+      ),
+      escrowBefore,
+      escrowAfter,
+    });
     assert.equal(job.status, 3);
     process.stdout.write(
       `PASS: Phase 5 local full flow job=${jobId} evidence=${artifactForPact.attestation.evidenceHash} tx=${submitted.expectedTxHash}\n`,
