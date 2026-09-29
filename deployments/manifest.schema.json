@@ -1,0 +1,171 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pact.invalid/deployments/manifest.schema.json",
+  "title": "Pact Arc deployment manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "status",
+    "network",
+    "chainId",
+    "deploymentTimestamp",
+    "deploymentBlock",
+    "deployer",
+    "gitCommit",
+    "usdc",
+    "erc8183",
+    "pactEvaluator",
+    "toolchain",
+    "deploymentTransactions",
+    "sourceVerification"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "status": { "const": "DEPLOYED" },
+    "network": { "enum": ["arc-testnet", "arc-mainnet"] },
+    "chainId": { "enum": ["5042002", "5042"] },
+    "deploymentTimestamp": { "type": "string", "format": "date-time" },
+    "deploymentBlock": { "$ref": "#/$defs/integerString" },
+    "deployer": { "$ref": "#/$defs/address" },
+    "gitCommit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "usdc": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["address", "decimals"],
+      "properties": {
+        "address": { "const": "0x3600000000000000000000000000000000000000" },
+        "decimals": { "const": 6 }
+      }
+    },
+    "erc8183": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "classification",
+        "proxy",
+        "implementation",
+        "proxyCodeHash",
+        "implementationCodeHash",
+        "sourceCommit",
+        "normativeRevision",
+        "defaultAdmin",
+        "admin",
+        "treasury",
+        "platformFeeBps",
+        "evaluatorFeeBps",
+        "paused",
+        "paymentTokenAllowed",
+        "hookPolicy"
+      ],
+      "properties": {
+        "classification": { "const": "PACT_MANAGED_PINNED" },
+        "proxy": { "$ref": "#/$defs/address" },
+        "implementation": { "$ref": "#/$defs/address" },
+        "proxyCodeHash": { "$ref": "#/$defs/hash" },
+        "implementationCodeHash": { "$ref": "#/$defs/hash" },
+        "sourceCommit": { "const": "142e669c1fd318486a4628395b629f033654dd06" },
+        "normativeRevision": {
+          "const": "a078cab5cc8e9581c15f76c091ed96eed28f02f7"
+        },
+        "defaultAdmin": { "$ref": "#/$defs/address" },
+        "admin": { "$ref": "#/$defs/address" },
+        "treasury": { "$ref": "#/$defs/address" },
+        "platformFeeBps": { "const": "0" },
+        "evaluatorFeeBps": { "const": "0" },
+        "paused": { "const": false },
+        "paymentTokenAllowed": { "const": true },
+        "hookPolicy": { "const": "NONE" }
+      }
+    },
+    "pactEvaluator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "address",
+        "codeHash",
+        "artifactBytecodeHash",
+        "commerceContract",
+        "verifier",
+        "admin",
+        "domainVersion"
+      ],
+      "properties": {
+        "address": { "$ref": "#/$defs/address" },
+        "codeHash": { "$ref": "#/$defs/hash" },
+        "artifactBytecodeHash": { "$ref": "#/$defs/hash" },
+        "commerceContract": { "$ref": "#/$defs/address" },
+        "verifier": { "$ref": "#/$defs/address" },
+        "admin": { "$ref": "#/$defs/address" },
+        "domainVersion": { "const": "2" }
+      }
+    },
+    "toolchain": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "solidity",
+        "evmTarget",
+        "foundryVersion",
+        "openZeppelinVersion",
+        "viemVersion"
+      ],
+      "properties": {
+        "solidity": { "const": "0.8.28" },
+        "evmTarget": { "const": "cancun" },
+        "foundryVersion": { "type": "string", "minLength": 1 },
+        "openZeppelinVersion": { "const": "5.6.1" },
+        "viemVersion": { "const": "2.56.9" }
+      }
+    },
+    "deploymentTransactions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["implementation", "proxy", "allowUsdc", "evaluator"],
+      "properties": {
+        "implementation": { "$ref": "#/$defs/hash" },
+        "proxy": { "$ref": "#/$defs/hash" },
+        "allowUsdc": { "$ref": "#/$defs/hash" },
+        "evaluator": { "$ref": "#/$defs/hash" }
+      }
+    },
+    "sourceVerification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["erc8183Implementation", "erc8183Proxy", "pactEvaluator"],
+      "properties": {
+        "erc8183Implementation": { "$ref": "#/$defs/verification" },
+        "erc8183Proxy": { "$ref": "#/$defs/verification" },
+        "pactEvaluator": { "$ref": "#/$defs/verification" }
+      }
+    },
+    "testnetGate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "gitCommit",
+        "erc8183SourceCommit",
+        "evaluatorCodeHash",
+        "completedAt",
+        "resultHash"
+      ],
+      "properties": {
+        "status": { "const": "PASS" },
+        "gitCommit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "erc8183SourceCommit": {
+          "const": "142e669c1fd318486a4628395b629f033654dd06"
+        },
+        "evaluatorCodeHash": { "$ref": "#/$defs/hash" },
+        "completedAt": { "type": "string", "format": "date-time" },
+        "resultHash": { "$ref": "#/$defs/hash" }
+      }
+    }
+  },
+  "$defs": {
+    "address": { "type": "string", "pattern": "^0x[0-9a-fA-F]{40}$" },
+    "hash": { "type": "string", "pattern": "^0x[0-9a-fA-F]{64}$" },
+    "integerString": { "type": "string", "pattern": "^(0|[1-9][0-9]*)$" },
+    "verification": { "enum": ["VERIFIED", "PENDING", "UNAVAILABLE"] }
+  }
+}

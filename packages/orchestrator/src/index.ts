@@ -76,3 +76,41 @@ export {
   type ParsedGitHubWebhook,
   type WebhookFailureCode,
 } from "./webhook.js";
+export {
+  ARC_MAINNET_CHAIN_ID,
+  ARC_TESTNET_CHAIN_ID,
+  ARC_USDC_ADDRESS,
+  ERC8183_NORMATIVE_REVISION,
+  ERC8183_SOURCE_COMMIT,
+  assertDeploymentManifest,
+  assertMainnetGate,
+  loadDeploymentManifest,
+  type DeploymentManifest,
+  type PactNetwork,
+} from "./deployment/manifest.js";
+export {
+  EIP1967_IMPLEMENTATION_SLOT,
+  ERC8183_ADMIN_ROLE,
+  DeploymentIntegrityError,
+  assertDeploymentCodeSnapshot,
+  verifyDeploymentIntegrity,
+  type DeploymentCodeSnapshot,
+} from "./deployment/integrity.js";
+export {
+  MAINNET_E2E_MAX_USDC_BASE_UNITS,
+  assertControlledE2EAmount,
+  assertZeroFeeEconomicAccounting,
+  authorizeMainnetRun,
+  parseUsdcBaseUnits,
+  type EconomicBalances,
+} from "./deployment/safety.js";
+export {
+  executeDeploymentTransaction,
+  type DeploymentJournal,
+  type DeploymentReceiptObservation,
+  type DeploymentTransactionExecutorOptions,
+  type DeploymentTransactionRecord,
+  type DeploymentTransactionState,
+  type PreparedDeploymentTransaction,
+} from "./deployment/transaction.js";
+export { FileDeploymentJournal } from "./deployment/file-journal.js";

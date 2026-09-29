@@ -13,6 +13,9 @@
   },
   "scripts": {
     "build": "tsc",
+    "deploy:arc": "node dist/deployment/deploy.js",
+    "operator:e2e": "node dist/deployment/operator.js",
+    "test:phase5-local": "node dist/deployment/local-e2e.js",
     "test:e2e": "node dist/relay/e2e.js",
     "typecheck": "tsc --noEmit"
   },

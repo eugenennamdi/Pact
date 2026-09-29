@@ -4,7 +4,11 @@ test = "test"
 out = "out"
 cache_path = "cache"
 libs = ["lib"]
-remappings = ["@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/"]
+remappings = [
+    "@erc8183/=lib/erc8183-base-contracts/contracts/",
+    "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
+    "@openzeppelin/contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/contracts/",
+]
 solc_version = "0.8.28"
 auto_detect_solc = false
 evm_version = "cancun"

@@ -387,6 +387,13 @@ See `PHASE4B_RELAY.md` for states, invariants, APIs, and operator recovery.
 
 ## Phase 5 — Arc integration and real ERC-8183 settlement
 
+Status (2026-09-29): **BLOCKED at the live Testnet gate.** Research, pinning,
+Pact-managed deployment tooling, manifest/integrity controls, ambiguity-safe
+transaction handling, and the real pinned-contract local settlement test are
+implemented. No Arc deployment has been attempted because the required operator
+identities, funded wallets, RPC choice, and real GitHub test case were not
+supplied. Mainnet remains prohibited.
+
 ### Objective
 
 Validate the pinned composition on an approved Arc environment and qualify

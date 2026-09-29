@@ -22,12 +22,12 @@ decision. Evidence explains why ERC-8183 released payment.
 
 ## Status
 
-Phases 0–3 and Phase 4A code review are complete. Phase 4A.1 and the local-only
-Phase 4B implementation pass their PostgreSQL, unit, contract, and Anvil gates
-and are pending Tech Lead review. Phase 4B adds one dedicated server-side relay
-EOA, durable nonce ownership, exact raw-transaction persistence, a single
-dispatch boundary, and read-only canonical reconciliation. No Arc transaction,
-final UI, or production deployment has been performed.
+Phases 0–4B have passed their local gates. Phase 5 adds the exact pinned
+ERC-8183 implementation and UUPS proxy, immutable deployment manifests, runtime
+code/configuration verification, ambiguity-safe deployment transactions, and
+controlled-value Testnet-before-Mainnet gates. Its local contract and tooling
+tests pass. Live Arc Testnet is blocked on explicit operator credentials, roles,
+funds, and a real GitHub test case; consequently Mainnet remains forbidden.
 
 With Node.js 22 or newer, install and verify with:
 
@@ -65,3 +65,19 @@ PACT_RELAY_E2E=1 DATABASE_URL=postgresql://.../pact_relay_e2e_test \
 The relay key is server-only `PACT_RELAY_PRIVATE_KEY`; it must differ from the
 verifier key and must never be exposed through `NEXT_PUBLIC_*`. See
 `docs/PHASE4B_RELAY.md` for the state machine and recovery runbook.
+
+After creating a clean reviewed release commit, follow `docs/DEPLOYMENT.md` for
+the explicit Arc Testnet deployment and controlled settlement gate. Deployment
+requires a literal network confirmation and writes a recovery journal before
+broadcasting any signed transaction. No deployment address is inferred or
+silently reused.
+
+Run the opt-in Phase 5 full-flow local gate against a freshly migrated,
+disposable test database. It launches Anvil, deploys the actual pinned ERC-8183
+proxy composition, and exercises Phase 4A and Phase 4B rather than a manual
+completion call:
+
+```bash
+PACT_PHASE5_LOCAL_E2E=1 DATABASE_URL=postgresql://.../pact_phase5_local_test \
+  npm run test:phase5-local
+```

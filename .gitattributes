@@ -1,0 +1,2 @@
+# Preserve the exact reviewed upstream source, including its original whitespace.
+packages/contracts/lib/erc8183-base-contracts/contracts/** whitespace=-trailing-space

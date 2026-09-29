@@ -1,9 +1,8 @@
 # ERC-8183 compatibility record
 
-Status: Phase 0.5 research record  
-Observed: 2026-09-27  
-Policy: every production review must re-check these sources; a moving branch is
-never a compatibility target.
+Status: Phase 5 revalidated research record Observed: 2026-09-29 Policy: every
+production review must re-check these sources; a moving branch is never a
+compatibility target.
 
 ## Source ledger
 
@@ -37,12 +36,13 @@ not a stable ABI identifier.
 - Toolchain at that commit: Solidity 0.8.28, Cancun EVM, OpenZeppelin 5.6.1,
   forge-std 1.16.1.
 
-This commit is a candidate implementation baseline, not a dependency installed
-by Phase 0.5 and not an approved production deployment. It is UUPS-upgradeable
-and exposes materially more surface than Pact needs: hooks, token allowlisting,
-fees, payout receivers, partial claims, meta-transaction extensions, pausing,
-and admin emergency withdrawal. Its privileged and upgrade surfaces must be
-reviewed before any deployment. Pinning a commit does not make that code safe.
+This commit was a candidate implementation baseline in Phase 0.5. Phase 5
+vendors its exact reviewed source for a Pact-managed deployment, but no live
+deployment is approved or claimed. It is UUPS-upgradeable and exposes materially
+more surface than Pact needs: hooks, token allowlisting, fees, payout receivers,
+partial claims, meta-transaction extensions, pausing, and admin emergency
+withdrawal. Its privileged and upgrade surfaces must be reviewed before any
+deployment. Pinning a commit does not make that code safe.
 
 ### Arc sources
 
@@ -174,3 +174,30 @@ Compatibility policy:
 If Pact deploys the reference implementation itself, that does not make it a
 canonical Arc deployment. Product copy must call it a Pact-managed pinned
 ERC-8183 deployment.
+
+## Phase 5 revalidation
+
+On 2026-09-29, the current `erc-8183/base-contracts` default branch still
+resolved to exact commit `142e669c1fd318486a4628395b629f033654dd06`. The current
+official EIP markdown was byte-for-byte identical to reviewed revision
+`a078cab5cc8e9581c15f76c091ed96eed28f02f7` (SHA-256
+`257c35bbaecab58d0c36823fe8fb2d0fffc83d6f1fd7301d97674707784efa3a`). This
+absence of observed upstream drift does not remove Draft status or make a moving
+branch an acceptable pin.
+
+The pinned reference source is vendored under
+`packages/contracts/lib/erc8183-base-contracts` and is compiled unchanged. Its
+reviewed implementation source SHA-256 is
+`c5db4bcdc89dce6cc53629a19fcbcb73e973bc07f83b07a730aa4712bdedb1e4`. Phase 5 also
+vendors the exact minimal OpenZeppelin Contracts Upgradeable 5.6.1 files
+required to build it. `Phase5Deployment.t.sol` executes the real pinned escrow
+lifecycle behind the same ERC-1967/UUPS proxy used by deployment tooling and
+proves zero-fee settlement through PactEvaluator.
+
+The security review confirms that `DEFAULT_ADMIN_ROLE` authorizes arbitrary UUPS
+upgrades and `ADMIN_ROLE` authorizes pause/unpause, fee and treasury changes,
+payment-token and hook allowlists, hook detachment, and emergency withdrawal of
+escrow while paused. Phase 5 therefore records both roles, treasury,
+implementation slot, runtime code hashes, fee values, pause state, canonical
+USDC allowlisting, and zero-hook policy. These checks detect drift; they do not
+eliminate privileged operator trust.
