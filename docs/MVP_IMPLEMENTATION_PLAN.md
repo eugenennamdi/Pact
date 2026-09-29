@@ -332,8 +332,9 @@ write, or multi-chain indexer.
 
 ### Blocking dependencies
 
-Phase 4B still requires relayer custody, nonce ownership, broadcast intent,
-ambiguity, receipt, and canonical settlement reconciliation decisions.
+Phase 4B implements the reviewed local relay custody, nonce ownership,
+broadcast-intent, ambiguity, receipt, and canonical reconciliation model. It
+remains pending Tech Lead review before Phase 5.
 
 ---
 
@@ -346,11 +347,12 @@ failure propagation. Both critical CAS transitions completed 100 race iterations
 with exactly one winner and one loser per iteration. Ordinary unit tests and
 application startup remain database-migration-free.
 
-Phase 4B remains blocked until Tech Lead review of this gate.
+This prerequisite gate passes. The local Phase 4B implementation also passes and
+remains pending Tech Lead review before Phase 5.
 
 ---
 
-## Phase 4B — Transaction relay and broadcast reconciliation
+## Phase 4B — Transaction relay and broadcast reconciliation (implemented locally; pending review)
 
 ### Objective
 
@@ -359,7 +361,27 @@ broadcast ambiguity, receipts, and canonical settlement reconciliation.
 
 ### Explicit boundary
 
-Phase 4A does not authorize this work. No transaction sender exists yet.
+The approved Phase 4B scope is implemented behind protected server-only routes.
+It has been exercised only against local Anvil and test-named PostgreSQL
+databases; no Arc write is authorized or performed.
+
+### Implemented safety boundary
+
+- A dedicated relay key, distinct from the verifier, exists only in server
+  configuration.
+- PostgreSQL serializes nonce reservation per chain/sender and permits one
+  unresolved intent; outside or pending nonce use fails closed.
+- Exact signed bytes and expected hash are durable before the single CAS-owned
+  dispatch call.
+- Any ambiguous broadcast result is read-only `BROADCAST_UNKNOWN`; restart and
+  retry paths never automatically resend.
+- Receipts, `PactCompleted`, binding acceptance, and ERC-8183 `Completed` state
+  must form one canonical outcome; external relayers are recorded explicitly.
+- Local gates cover response loss, pre-forward failure, hash mismatch, reverted
+  receipt, external completion, concurrent external race, crash recovery, and
+  nonce drift.
+
+See `PHASE4B_RELAY.md` for states, invariants, APIs, and operator recovery.
 
 ---
 

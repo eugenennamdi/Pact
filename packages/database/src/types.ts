@@ -111,6 +111,102 @@ export interface PersistedAttestation {
   readonly validUntil: bigint;
   readonly jobKey: Hex32;
 }
+
+export const relayStates = [
+  "PREPARING",
+  "SIGNED",
+  "DISPATCHING",
+  "SUBMITTED",
+  "BROADCAST_UNKNOWN",
+  "SETTLED",
+  "SETTLED_EXTERNALLY",
+  "COMPLETED_BY_DIFFERENT_ATTESTATION",
+  "REVERTED",
+  "INTEGRITY_FAILURE",
+  "EXPIRED_UNSENT",
+  "PRECONDITION_FAILED",
+  "NONCE_DRIFT",
+  "INSUFFICIENT_RELAY_GAS",
+] as const;
+export type RelayState = (typeof relayStates)[number];
+
+export interface ReadyToRelayArtifact {
+  readonly operationId: string;
+  readonly pact: PactRecord;
+  readonly evidence: PactGitHubPrMergedEvidenceV1;
+  readonly attestation: PersistedAttestation;
+  readonly readyBlockNumber: bigint;
+}
+
+export interface RelayIntentRecord {
+  readonly id: string;
+  readonly pactRecordId: string;
+  readonly attestationDigest: Hex32;
+  readonly state: RelayState;
+  readonly code: string | null;
+  readonly retryable: boolean;
+  readonly chainId: bigint;
+  readonly relayAddress: Address;
+  readonly pactEvaluator: Address;
+  readonly commerceContract: Address;
+  readonly nonce: number | null;
+  readonly calldata: Hex | null;
+  /** Sensitive broadcast capability. Never include in public DTOs or logs. */
+  readonly serializedTransaction: Hex | null;
+  readonly expectedTxHash: Hex32 | null;
+  readonly transactionType: "eip1559" | "legacy" | null;
+  readonly gasLimit: bigint | null;
+  readonly gasPrice: bigint | null;
+  readonly maxFeePerGas: bigint | null;
+  readonly maxPriorityFeePerGas: bigint | null;
+  readonly preDispatchBlockNumber: bigint | null;
+  readonly preDispatchBlockHash: Hex32 | null;
+  readonly broadcastAttemptCount: number;
+  readonly returnedTxHash: Hex32 | null;
+  readonly receiptStatus: "success" | "reverted" | null;
+  readonly receiptBlockNumber: bigint | null;
+  readonly receiptBlockHash: Hex32 | null;
+  readonly receiptTransactionIndex: number | null;
+  readonly canonicalTxHash: Hex32 | null;
+  readonly eventBlockNumber: bigint | null;
+  readonly eventBlockHash: Hex32 | null;
+  readonly eventLogIndex: number | null;
+  readonly eventRelayer: Address | null;
+  readonly eventVerifier: Address | null;
+  readonly version: number;
+}
+
+export interface PersistedRelayTransaction {
+  readonly calldata: Hex;
+  readonly serializedTransaction: Hex;
+  readonly expectedTxHash: Hex32;
+  readonly transactionType: "eip1559" | "legacy";
+  readonly gasLimit: bigint;
+  readonly gasPrice?: bigint;
+  readonly maxFeePerGas?: bigint;
+  readonly maxPriorityFeePerGas?: bigint;
+  readonly preDispatchBlockNumber: bigint;
+  readonly preDispatchBlockHash: Hex32;
+}
+
+export interface CanonicalRelayOutcome {
+  readonly canonicalTxHash: Hex32;
+  readonly receiptStatus?: "success" | "reverted";
+  readonly receiptBlockNumber?: bigint;
+  readonly receiptBlockHash?: Hex32;
+  readonly receiptTransactionIndex?: number;
+  readonly eventBlockNumber?: bigint;
+  readonly eventBlockHash?: Hex32;
+  readonly eventLogIndex?: number;
+  readonly eventRelayer?: Address;
+  readonly eventVerifier?: Address;
+}
+
+export type RelayNonceReservation =
+  | { readonly kind: "RESERVED"; readonly intent: RelayIntentRecord }
+  | { readonly kind: "EXISTING"; readonly intent: RelayIntentRecord }
+  | { readonly kind: "SENDER_BUSY"; readonly intent: RelayIntentRecord }
+  | { readonly kind: "NONCE_DRIFT"; readonly intent: RelayIntentRecord };
 export interface PactRepository {
   createPact(record: PactRecord): Promise<PactRecord>;
   getPact(id: string): Promise<PactRecord | undefined>;

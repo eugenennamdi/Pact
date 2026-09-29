@@ -19,6 +19,7 @@
     "lint": "eslint . --max-warnings 0",
     "test": "vitest run",
     "test:database-live": "npm run build --workspace=@pact/database && npm run test:live --workspace=@pact/database",
+    "test:relay-e2e": "npm run build --workspace=@pact/database && npm run build --workspace=@pact/orchestrator && npm run test:e2e --workspace=@pact/orchestrator",
     "typecheck": "npm run typecheck --workspaces --if-present"
   },
   "devDependencies": {

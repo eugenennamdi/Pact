@@ -23,6 +23,49 @@ export {
 } from "./service.js";
 export { assertAllowedTransition, operationTransitions } from "./state.js";
 export {
+  pactCompletionAcceptedEvent,
+  pactRelayAbi,
+  relayErc8183Abi,
+} from "./relay/abi.js";
+export {
+  RELAY_GAS_MARGIN_DENOMINATOR,
+  RELAY_GAS_MARGIN_NUMERATOR,
+  RelayRpcReadError,
+  RelaySimulationError,
+  createRelayChainClient,
+  type RelayBroadcastTransport,
+  type RelayChainClient,
+  type RelayCompletionEvent,
+  type RelayNetworkPreparation,
+  type RelayPreflight,
+  type RelayReceiptObservation,
+} from "./relay/chain.js";
+export {
+  decideRelayPreflight,
+  reconcileRelayObservation,
+  type RelayPreflightDecision,
+  type RelayReconciliationDecision,
+} from "./relay/reconcile.js";
+export {
+  createPactRelayService,
+  type PactRelayServiceOptions,
+  type RelayRepository,
+  type RelayProcessResult,
+} from "./relay/service.js";
+export {
+  assertPactRelayCalldata,
+  assertRelayArtifactIntegrity,
+  buildPactRelayCalldata,
+  createPactRelaySigner,
+  createPactRelaySignerFromEnv,
+  preparePactRelayTransaction,
+  type ExactRelayTransactionRequest,
+  type PactRelaySigner,
+  type PreparedPactRelayTransaction,
+  type SignedPactRelayTransaction,
+} from "./relay/signer.js";
+export { assertRelayTransition, relayTransitions } from "./relay/state.js";
+export {
   GITHUB_WEBHOOK_BODY_LIMIT_BYTES,
   GITHUB_WEBHOOK_SECRET_MAX_BYTES,
   GITHUB_WEBHOOK_SECRET_MIN_BYTES,

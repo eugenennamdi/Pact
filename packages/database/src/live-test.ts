@@ -11,17 +11,21 @@ import {
   type Hex32,
   type PactGitHubPrMergedEvidenceV1,
 } from "@pact/protocol";
+import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import postgres from "postgres";
 import { keccak256, stringToHex, type Hex } from "viem";
 import { createPactDatabase, type PactDatabase } from "./client.js";
+import { PostgresRelayRepository } from "./relay-repository.js";
 import { PostgresPactRepository } from "./repository.js";
 import {
   attestations,
+  chainReconciliations,
   evidenceRecords,
   operations,
   pactRecords,
+  relayIntents,
 } from "./schema.js";
 import * as schema from "./schema.js";
 import type {
@@ -39,6 +43,7 @@ const EXPECTED_TABLES = [
   "github_deliveries",
   "operations",
   "pact_records",
+  "relay_intents",
   "verification_attempts",
 ] as const;
 const EXPECTED_INDEXES = [
@@ -47,6 +52,9 @@ const EXPECTED_INDEXES = [
   "operations_trigger_uq",
   "pact_records_chain_job_uq",
   "pact_records_job_key_uq",
+  "relay_intents_attestation_uq",
+  "relay_intents_sender_nonce_uq",
+  "relay_intents_sender_unresolved_uq",
 ] as const;
 const EXPECTED_CONSTRAINTS = [
   "attestations_evidence_hash_evidence_records_evidence_hash_fk",
@@ -55,6 +63,7 @@ const EXPECTED_CONSTRAINTS = [
   "github_deliveries_pkey",
   "operations_state_valid",
   "pact_records_pkey",
+  "relay_intents_state_valid",
   "verification_attempts_evidence_hash_evidence_records_evidence_hash_fk",
 ] as const;
 
@@ -322,6 +331,70 @@ function attestationInsertValues(input: {
     signature: attestation.signature,
     active: true,
   };
+}
+
+async function createReadyRelayArtifact(
+  repository: PostgresPactRepository,
+  database: PactDatabase,
+  label: string,
+) {
+  const pact = pactFixture(label);
+  await repository.createPact(pact);
+  const operationId = await insertOperation(
+    database,
+    pact.id,
+    "SIGNING",
+    `relay:${label}`,
+  );
+  const preparedEvidence = evidenceFixture(pact, label);
+  const attestation = attestationFixture({
+    pact,
+    ...preparedEvidence,
+    label,
+  });
+  await database.db.insert(chainReconciliations).values({
+    id: crypto.randomUUID(),
+    operationId,
+    attemptNumber: 1,
+    outcome: "READY",
+    blockNumber: "100",
+    blockHash: hex32(`relay-block:${label}`),
+    blockTimestamp: "1800000011",
+    chainId: pact.chainId.toString(),
+    pactEvaluator: pact.pactEvaluator,
+    commerceContract: pact.commerceContract,
+    jobId: pact.jobId.toString(),
+    jobKey: pact.jobKey,
+    bindingExists: true,
+    bindingConditionHash: pact.conditionHash,
+    bindingCompletionDeadline: pact.completionDeadline.toString(),
+    bindingVerifier: "0x3333333333333333333333333333333333333333",
+    bindingAccepted: false,
+    verifierRevoked: false,
+    jobClient: "0x4444444444444444444444444444444444444444",
+    jobProvider: "0x5555555555555555555555555555555555555555",
+    jobEvaluator: pact.pactEvaluator,
+    jobStatus: 2,
+    jobExpiredAt: "1900001000",
+  });
+  await repository.persistReadyToRelay(
+    operationId,
+    pact.id,
+    preparedEvidence.evidence,
+    preparedEvidence.evidenceHash,
+    attestation,
+  );
+  return {
+    operationId,
+    pact,
+    evidence: preparedEvidence.evidence,
+    attestation,
+    readyBlockNumber: 100n,
+  } as const;
+}
+
+function relayAddress(ordinal: number): `0x${string}` {
+  return `0x${ordinal.toString(16).padStart(40, "0")}`;
 }
 
 async function insertOperation(
@@ -728,6 +801,149 @@ async function run(): Promise<void> {
     "repository artifact race commits one READY_TO_RELAY artifact and rejects one worker",
   );
 
+  const relayRepositoryA = new PostgresRelayRepository(workerDatabaseA);
+  const relayRepositoryB = new PostgresRelayRepository(workerDatabaseB);
+  let relayRaceWinners = 0;
+  let relayRaceLosers = 0;
+  let durableRelayIntentId: string | undefined;
+  for (let iteration = 0; iteration < CAS_ITERATIONS; iteration++) {
+    const ready = await createReadyRelayArtifact(
+      repository,
+      workingDatabase,
+      `relay-claim-${iteration}`,
+    );
+    const address = relayAddress(10_000 + iteration);
+    const input = {
+      artifact: ready,
+      relayAddress: address,
+      preDispatchBlockNumber: 101n,
+      preDispatchBlockHash: hex32(`relay-pre-dispatch:${iteration}`),
+      readNonces: async () => ({ latest: 0, pending: 0 }),
+    } as const;
+    const results = await Promise.all([
+      relayRepositoryA.reserveNonce(input),
+      relayRepositoryB.reserveNonce(input),
+    ]);
+    relayRaceWinners += results.filter(
+      ({ kind }) => kind === "RESERVED",
+    ).length;
+    relayRaceLosers += results.filter(({ kind }) => kind === "EXISTING").length;
+    assert.equal(
+      new Set(results.map(({ intent }) => intent.id)).size,
+      1,
+      "relay artifact race produced different intents",
+    );
+    if (iteration === CAS_ITERATIONS - 1)
+      durableRelayIntentId = results[0]?.intent.id;
+  }
+  assert.equal(relayRaceWinners, CAS_ITERATIONS);
+  assert.equal(relayRaceLosers, CAS_ITERATIONS);
+  pass(
+    `relay claim CAS: ${CAS_ITERATIONS} races, ${CAS_ITERATIONS} winners, ${CAS_ITERATIONS} losers, zero anomalies`,
+  );
+
+  const senderRaceA = await createReadyRelayArtifact(
+    repository,
+    workingDatabase,
+    "relay-sender-a",
+  );
+  const senderRaceB = await createReadyRelayArtifact(
+    repository,
+    workingDatabase,
+    "relay-sender-b",
+  );
+  const sharedRelayAddress = relayAddress(90_000);
+  const senderRaceResults = await Promise.all([
+    relayRepositoryA.reserveNonce({
+      artifact: senderRaceA,
+      relayAddress: sharedRelayAddress,
+      preDispatchBlockNumber: 101n,
+      preDispatchBlockHash: hex32("sender-race-a"),
+      readNonces: async () => ({ latest: 0, pending: 0 }),
+    }),
+    relayRepositoryB.reserveNonce({
+      artifact: senderRaceB,
+      relayAddress: sharedRelayAddress,
+      preDispatchBlockNumber: 101n,
+      preDispatchBlockHash: hex32("sender-race-b"),
+      readNonces: async () => ({ latest: 0, pending: 0 }),
+    }),
+  ]);
+  assert.equal(
+    senderRaceResults.filter(({ kind }) => kind === "RESERVED").length,
+    1,
+  );
+  assert.equal(
+    senderRaceResults.filter(({ kind }) => kind === "SENDER_BUSY").length,
+    1,
+  );
+  pass("two distinct Pacts racing one relay sender produce one nonce owner");
+
+  assert(durableRelayIntentId !== undefined);
+  await expectRejected(
+    workingDatabase.sql.begin(async (transaction) => {
+      await transaction`update relay_intents set state = 'SIGNED', calldata = '0x1234', serialized_transaction = '0x02aa', expected_tx_hash = ${hex32("rolled-back-relay")}, transaction_type = 'eip1559', gas_limit = '250000', max_fee_per_gas = '2', max_priority_fee_per_gas = '1' where id = ${durableRelayIntentId}::uuid`;
+      await transaction.unsafe("select * from pact_live_missing_relay_table");
+    }),
+    "42P01",
+  );
+  assert.equal(
+    (await relayRepositoryA.getIntent(durableRelayIntentId))?.state,
+    "PREPARING",
+  );
+  pass("relay transaction state rolls back atomically on database failure");
+
+  const signedRelay = await relayRepositoryA.persistSignedTransaction(
+    durableRelayIntentId,
+    {
+      calldata: "0x1234",
+      serializedTransaction: "0x02aa",
+      expectedTxHash: hex32("durable-relay"),
+      transactionType: "eip1559",
+      gasLimit: 250_000n,
+      maxFeePerGas: 2n,
+      maxPriorityFeePerGas: 1n,
+      preDispatchBlockNumber: 101n,
+      preDispatchBlockHash: hex32("relay-pre-dispatch-durable"),
+    },
+  );
+  assert.equal(signedRelay?.state, "SIGNED");
+  const dispatchClaims = await Promise.all([
+    relayRepositoryA.claimDispatch(durableRelayIntentId),
+    relayRepositoryB.claimDispatch(durableRelayIntentId),
+  ]);
+  assert.equal(dispatchClaims.filter((value) => value !== undefined).length, 1);
+  assert.equal(
+    dispatchClaims.find((value) => value !== undefined)?.broadcastAttemptCount,
+    1,
+  );
+  await expectRejected(
+    workerDatabaseA.db
+      .update(relayIntents)
+      .set({ serializedTransaction: "0x02bb" })
+      .where(eq(relayIntents.id, durableRelayIntentId)),
+    "23514",
+    "relay_intents_signed_identity_immutable",
+  );
+  assert.equal(
+    await relayRepositoryA.recoverDispatching(
+      relayAddress(10_000 + CAS_ITERATIONS - 1),
+      5042n,
+    ),
+    1,
+  );
+  assert.equal(
+    (await relayRepositoryA.getIntent(durableRelayIntentId))?.state,
+    "BROADCAST_UNKNOWN",
+  );
+  assert.equal(
+    await relayRepositoryB.claimDispatch(durableRelayIntentId),
+    undefined,
+  );
+  pass(
+    "dispatch ownership is durable, immutable, recoverable only to BROADCAST_UNKNOWN, and cannot be reclaimed",
+  );
+
   const directArtifactPact = pactFixture("direct-artifact-race");
   await repository.createPact(directArtifactPact);
   const directOperationA = await insertOperation(
@@ -1103,7 +1319,7 @@ async function run(): Promise<void> {
   pass("statement timeout creates no protocol conclusion");
 
   process.stdout.write(
-    `LIVE DATABASE PASS: ${checkCount} invariant groups; ${CAS_ITERATIONS} PENDING races and ${CAS_ITERATIONS} READY_TO_SIGN races.\n`,
+    `LIVE DATABASE PASS: ${checkCount} invariant groups; ${CAS_ITERATIONS} PENDING races, ${CAS_ITERATIONS} READY_TO_SIGN races, and ${CAS_ITERATIONS} relay-claim races.\n`,
   );
 }
 

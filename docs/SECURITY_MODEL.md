@@ -1,8 +1,8 @@
 # Pact MVP security model
 
-Status: Updated through the passing Phase 4A.1 PostgreSQL durability gate; not
-an audit result. The local EOA signer is gated by authoritative same-block chain
-reads and live-validated durable orchestration, but there is no transaction
+Status: Updated through the passing local-only Phase 4B relay gate; not an audit
+result. The local EOA signer is gated by authoritative same-block chain reads
+and live-validated durable orchestration, but there is no transaction
 broadcaster or production key.
 
 ## Assets to protect
@@ -278,6 +278,20 @@ attestation digest, calldata hash, relayer, and nonce. A timeout or missing hash
 may mean the transaction was broadcast. Reconcile known/derived hash,
 sender/nonce, Pact events, and ERC-8183 status through independent reads before
 replacement. Finality after inclusion does not remove pre-inclusion ambiguity.
+
+The Phase 4B implementation therefore signs locally, persists the exact signed
+bytes and expected hash, atomically claims a single dispatch, and invokes the
+raw-send transport at most once. Every send exception—including timeout,
+`already known`, and `nonce too low`—becomes `BROADCAST_UNKNOWN`; none proves
+non-forwarding. Restart recovery moves `DISPATCHING` only to that read-only
+state. It never resends, replaces, or re-signs a claimed nonce.
+
+The relay EOA is dedicated to Pact. The repository establishes its first
+observed nonce as a baseline, then requires subsequent latest nonce to equal the
+last dispatched Pact nonce plus one and requires `pending == latest`. An outside
+transaction or unknown pending transaction produces terminal `NONCE_DRIFT` and
+no send. Operator investigation is required; Phase 4B has no automatic nonce
+repair.
 
 ## Wallet and frontend safety
 

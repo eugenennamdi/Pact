@@ -9,12 +9,13 @@ import {
   githubDeliveries,
   operations,
   pactRecords,
+  relayIntents,
   verificationAttempts,
 } from "./schema.js";
-import { operationStates } from "./types.js";
+import { operationStates, relayStates } from "./types.js";
 
 describe("Phase 4A database contract", () => {
-  it("pins the seven durable domain tables", () => {
+  it("pins the eight durable domain tables", () => {
     expect(
       [
         pactRecords,
@@ -24,6 +25,7 @@ describe("Phase 4A database contract", () => {
         evidenceRecords,
         chainReconciliations,
         attestations,
+        relayIntents,
       ].map((table) => getTableConfig(table).name),
     ).toEqual([
       "pact_records",
@@ -33,6 +35,7 @@ describe("Phase 4A database contract", () => {
       "evidence_records",
       "chain_reconciliations",
       "attestations",
+      "relay_intents",
     ]);
   });
 
@@ -44,6 +47,9 @@ describe("Phase 4A database contract", () => {
       ({ config }) => config.name,
     );
     const attestationIndexes = getTableConfig(attestations).indexes.map(
+      ({ config }) => config.name,
+    );
+    const relayIndexes = getTableConfig(relayIntents).indexes.map(
       ({ config }) => config.name,
     );
     expect(pactIndexes).toEqual(
@@ -59,7 +65,34 @@ describe("Phase 4A database contract", () => {
       ]),
     );
     expect(attestationIndexes).toContain("attestations_one_active_per_pact_uq");
+    expect(relayIndexes).toEqual(
+      expect.arrayContaining([
+        "relay_intents_attestation_uq",
+        "relay_intents_sender_unresolved_uq",
+        "relay_intents_sender_nonce_uq",
+      ]),
+    );
     expect(githubDeliveries.deliveryId.primary).toBe(true);
+  });
+
+  it("pins explicit relay states without a generic FAILED bucket", () => {
+    expect(relayStates).toEqual([
+      "PREPARING",
+      "SIGNED",
+      "DISPATCHING",
+      "SUBMITTED",
+      "BROADCAST_UNKNOWN",
+      "SETTLED",
+      "SETTLED_EXTERNALLY",
+      "COMPLETED_BY_DIFFERENT_ATTESTATION",
+      "REVERTED",
+      "INTEGRITY_FAILURE",
+      "EXPIRED_UNSENT",
+      "PRECONDITION_FAILED",
+      "NONCE_DRIFT",
+      "INSUFFICIENT_RELAY_GAS",
+    ]);
+    expect(relayStates).not.toContain("FAILED" as never);
   });
 
   it("pins explicit operation states", () => {

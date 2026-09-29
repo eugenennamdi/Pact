@@ -22,11 +22,12 @@ decision. Evidence explains why ERC-8183 released payment.
 
 ## Status
 
-Phases 0–3 and Phase 4A code review are complete. Phase 4A.1 validates the
-durable PostgreSQL orchestration, uniqueness, CAS, rollback, and recovery model
-against real PostgreSQL; its gate passes and is pending Tech Lead review before
-Phase 4B. No transaction broadcaster, relayer wallet, final UI, or deployment
-exists yet.
+Phases 0–3 and Phase 4A code review are complete. Phase 4A.1 and the local-only
+Phase 4B implementation pass their PostgreSQL, unit, contract, and Anvil gates
+and are pending Tech Lead review. Phase 4B adds one dedicated server-side relay
+EOA, durable nonce ownership, exact raw-transaction persistence, a single
+dispatch boundary, and read-only canonical reconciliation. No Arc transaction,
+final UI, or production deployment has been performed.
 
 With Node.js 22 or newer, install and verify with:
 
@@ -52,3 +53,15 @@ explicit test-named PostgreSQL database:
 PACT_DATABASE_LIVE_TEST=1 DATABASE_URL=postgresql://.../pact_live_test \
   npm run test:database-live
 ```
+
+Run the opt-in local PostgreSQL + Anvil relay gate against a fresh migrated test
+database:
+
+```bash
+PACT_RELAY_E2E=1 DATABASE_URL=postgresql://.../pact_relay_e2e_test \
+  npm run test:relay-e2e
+```
+
+The relay key is server-only `PACT_RELAY_PRIVATE_KEY`; it must differ from the
+verifier key and must never be exposed through `NEXT_PUBLIC_*`. See
+`docs/PHASE4B_RELAY.md` for the state machine and recovery runbook.

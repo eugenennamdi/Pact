@@ -6,6 +6,7 @@ import {
   index,
   integer,
   pgTable,
+  text,
   timestamp,
   uniqueIndex,
   uuid,
@@ -292,6 +293,87 @@ export const attestations = pgTable(
     check(
       "attestations_time_order_valid",
       sql`${table.satisfiedAt}::numeric <= ${table.verifiedAt}::numeric and ${table.verifiedAt}::numeric <= ${table.validUntil}::numeric`,
+    ),
+  ],
+);
+
+export const relayIntents = pgTable(
+  "relay_intents",
+  {
+    id: uuid("id").primaryKey(),
+    pactRecordId: uuid("pact_record_id")
+      .notNull()
+      .references(() => pactRecords.id, { onDelete: "restrict" }),
+    attestationDigest: varchar("attestation_digest", { length: 66 })
+      .notNull()
+      .references(() => attestations.digest, { onDelete: "restrict" }),
+    state: varchar("state", { length: 48 }).notNull(),
+    code: varchar("code", { length: 80 }),
+    retryable: boolean("retryable").default(false).notNull(),
+    chainId: varchar("chain_id", { length: 78 }).notNull(),
+    relayAddress: varchar("relay_address", { length: 42 }).notNull(),
+    pactEvaluator: varchar("pact_evaluator", { length: 42 }).notNull(),
+    commerceContract: varchar("commerce_contract", { length: 42 }).notNull(),
+    nonce: varchar("nonce", { length: 20 }),
+    calldata: text("calldata"),
+    serializedTransaction: text("serialized_transaction"),
+    expectedTxHash: varchar("expected_tx_hash", { length: 66 }),
+    transactionType: varchar("transaction_type", { length: 16 }),
+    gasLimit: varchar("gas_limit", { length: 78 }),
+    gasPrice: varchar("gas_price", { length: 78 }),
+    maxFeePerGas: varchar("max_fee_per_gas", { length: 78 }),
+    maxPriorityFeePerGas: varchar("max_priority_fee_per_gas", { length: 78 }),
+    preDispatchBlockNumber: varchar("pre_dispatch_block_number", {
+      length: 78,
+    }),
+    preDispatchBlockHash: varchar("pre_dispatch_block_hash", { length: 66 }),
+    broadcastAttemptCount: integer("broadcast_attempt_count")
+      .default(0)
+      .notNull(),
+    returnedTxHash: varchar("returned_tx_hash", { length: 66 }),
+    receiptStatus: varchar("receipt_status", { length: 12 }),
+    receiptBlockNumber: varchar("receipt_block_number", { length: 78 }),
+    receiptBlockHash: varchar("receipt_block_hash", { length: 66 }),
+    receiptTransactionIndex: integer("receipt_transaction_index"),
+    canonicalTxHash: varchar("canonical_tx_hash", { length: 66 }),
+    eventBlockNumber: varchar("event_block_number", { length: 78 }),
+    eventBlockHash: varchar("event_block_hash", { length: 66 }),
+    eventLogIndex: integer("event_log_index"),
+    eventRelayer: varchar("event_relayer", { length: 42 }),
+    eventVerifier: varchar("event_verifier", { length: 42 }),
+    version: integer("version").default(0).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("relay_intents_attestation_uq").on(table.attestationDigest),
+    uniqueIndex("relay_intents_sender_unresolved_uq")
+      .on(table.chainId, table.relayAddress)
+      .where(
+        sql`${table.state} in ('PREPARING','SIGNED','DISPATCHING','SUBMITTED','BROADCAST_UNKNOWN')`,
+      ),
+    uniqueIndex("relay_intents_sender_nonce_uq")
+      .on(table.chainId, table.relayAddress, table.nonce)
+      .where(
+        sql`${table.nonce} is not null and ${table.state} in ('PREPARING','SIGNED','DISPATCHING','SUBMITTED','BROADCAST_UNKNOWN')`,
+      ),
+    index("relay_intents_state_idx").on(table.state, table.updatedAt),
+    check("relay_intents_version_nonnegative", sql`${table.version} >= 0`),
+    check(
+      "relay_intents_broadcast_count_valid",
+      sql`${table.broadcastAttemptCount} between 0 and 1`,
+    ),
+    check(
+      "relay_intents_state_valid",
+      sql`${table.state} in ('PREPARING','SIGNED','DISPATCHING','SUBMITTED','BROADCAST_UNKNOWN','SETTLED','SETTLED_EXTERNALLY','COMPLETED_BY_DIFFERENT_ATTESTATION','REVERTED','INTEGRITY_FAILURE','EXPIRED_UNSENT','PRECONDITION_FAILED','NONCE_DRIFT','INSUFFICIENT_RELAY_GAS')`,
+    ),
+    check(
+      "relay_intents_dispatch_identity_valid",
+      sql`${table.state} not in ('SIGNED','DISPATCHING','SUBMITTED','BROADCAST_UNKNOWN','SETTLED','REVERTED') or (${table.nonce} is not null and ${table.calldata} is not null and ${table.serializedTransaction} is not null and ${table.expectedTxHash} is not null and ${table.gasLimit} is not null and ${table.transactionType} is not null and ${table.preDispatchBlockNumber} is not null and ${table.preDispatchBlockHash} is not null)`,
     ),
   ],
 );

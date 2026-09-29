@@ -1,11 +1,15 @@
 import {
   PostgresPactRepository,
+  PostgresRelayRepository,
   createPactDatabase,
   type PactDatabase,
 } from "@pact/database";
 import {
   createArcReadClient,
   createPhase4AOrchestrator,
+  createPactRelayService,
+  createPactRelaySignerFromEnv,
+  createRelayChainClient,
   loadPhase4AConfig,
   type Phase4AConfig,
 } from "@pact/orchestrator";
@@ -19,7 +23,13 @@ export interface Phase4ARuntime {
   readonly orchestrator: ReturnType<typeof createPhase4AOrchestrator>;
 }
 
+export interface Phase4BRuntime extends Phase4ARuntime {
+  readonly relayRepository: PostgresRelayRepository;
+  readonly relay: ReturnType<typeof createPactRelayService>;
+}
+
 let runtime: Phase4ARuntime | undefined;
+let relayRuntime: Phase4BRuntime | undefined;
 
 export function getPhase4ARuntime(): Phase4ARuntime {
   if (runtime !== undefined) return runtime;
@@ -42,4 +52,30 @@ export function getPhase4ARuntime(): Phase4ARuntime {
     }),
   });
   return runtime;
+}
+
+export function getPhase4BRuntime(): Phase4BRuntime {
+  if (relayRuntime !== undefined) return relayRuntime;
+  const phase4A = getPhase4ARuntime();
+  const verifierSigner = createPactCompletionSignerFromEnv(process.env);
+  const relaySigner = createPactRelaySignerFromEnv(
+    verifierSigner.address,
+    process.env,
+  );
+  const chain = createRelayChainClient({ rpcUrl: phase4A.config.arcRpcUrl });
+  const relayRepository = new PostgresRelayRepository(phase4A.database);
+  relayRuntime = Object.freeze({
+    ...phase4A,
+    relayRepository,
+    relay: createPactRelayService({
+      repository: relayRepository,
+      chain,
+      transport: chain.broadcast,
+      signer: relaySigner,
+      configuredChainId: phase4A.config.arcChainId,
+      configuredPactEvaluator: phase4A.config.pactEvaluatorAddress,
+      configuredCommerceContract: phase4A.config.commerceContractAddress,
+    }),
+  });
+  return relayRuntime;
 }

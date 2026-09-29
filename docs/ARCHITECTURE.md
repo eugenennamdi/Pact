@@ -1,8 +1,8 @@
 # Pact MVP architecture
 
-Status: Updated through the passing Phase 4A.1 PostgreSQL durability gate;
-pending Tech Lead review before Phase 4B.  
-Compatibility source record: `docs/ERC8183_COMPATIBILITY.md`.
+Status: Updated through the passing local-only Phase 4B relay gate; pending Tech
+Lead review before Phase 5. Compatibility source record:
+`docs/ERC8183_COMPATIBILITY.md`.
 
 ## Core correction
 
@@ -528,10 +528,21 @@ reconciliations, and immutable prepared attestations. PostgreSQL constraints
 enforce semantic job identity, delivery deduplication, one active operation,
 unique evidence/digests, and one active prepared artifact per Pact binding.
 
-The implemented operation stops at `READY_TO_RELAY`. It contains no wallet
-client, sender key, nonce, transaction intent, or broadcast call. Phase 4B must
-introduce transaction intent persistence and ambiguous-broadcast reconciliation
-without weakening this signing gate. See `PHASE4A_DURABILITY.md`.
+Phase 4B consumes `READY_TO_RELAY` through a separate server-only relay key. A
+PostgreSQL advisory transaction lock serializes `(chainId, relayAddress)` nonce
+ownership, and a partial unique constraint permits only one unresolved intent
+for that sender. The exact calldata, nonce, fee fields, serialized signed bytes,
+and locally derived transaction hash are committed before dispatch. A CAS then
+crosses the one-way `SIGNED -> DISPATCHING` boundary; no state can reclaim it or
+automatically resend it.
+
+`SUBMITTED`, `DISPATCHING` recovered as `BROADCAST_UNKNOWN`, and ambiguous send
+errors are reconciled only with authoritative RPC reads. A matching successful
+receipt is insufficient by itself: the matching `PactCompletionAccepted` event,
+accepted binding, and ERC-8183 `Completed` status must agree. A canonical event
+from another relayer is recorded as `SETTLED_EXTERNALLY`; a different accepted
+attestation is distinct and explicit. See `PHASE4A_DURABILITY.md` and
+`PHASE4B_RELAY.md`.
 
 ## Arc configuration
 
