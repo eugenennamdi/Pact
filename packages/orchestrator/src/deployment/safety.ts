@@ -1,9 +1,29 @@
-import type { Hex } from "viem";
+import { keccak256, stringToHex, type Hex } from "viem";
 import { assertMainnetGate, type DeploymentManifest } from "./manifest.js";
 
 export const MAINNET_E2E_MAX_USDC_BASE_UNITS = 100_000n;
 export const TESTNET_REHEARSAL_COMPLETION_OFFSET_SECONDS = 2n * 60n * 60n;
 export const TESTNET_REHEARSAL_EXPIRY_OFFSET_SECONDS = 6n * 60n * 60n;
+
+export function controlledE2EOperationTrigger(input: {
+  readonly jobKey: Hex;
+  readonly runtimeCommit: string;
+  readonly scope: string;
+}): string {
+  if (!/^0x[0-9a-fA-F]{64}$/.test(input.jobKey))
+    throw new Error("E2E_JOB_KEY_INVALID");
+  if (!/^[0-9a-f]{40}$/.test(input.runtimeCommit))
+    throw new Error("E2E_RUNTIME_COMMIT_INVALID");
+  const scope = input.scope.trim();
+  if (scope.length === 0 || scope.length > 160)
+    throw new Error("E2E_OPERATION_SCOPE_INVALID");
+  const digest = keccak256(
+    stringToHex(
+      JSON.stringify([input.jobKey.toLowerCase(), input.runtimeCommit, scope]),
+    ),
+  );
+  return `phase5:${digest}`;
+}
 
 export function controlledE2EWindow(
   network: "arc-testnet" | "arc-mainnet",

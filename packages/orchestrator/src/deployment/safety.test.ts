@@ -9,11 +9,36 @@ import {
   arcNativeToErc20Truncated,
   calculateGasFee,
   controlledE2EWindow,
+  controlledE2EOperationTrigger,
   parseUsdcBaseUnits,
   reconcileArcNativeBalance,
 } from "./safety.js";
 
 describe("controlled deployment safety", () => {
+  it("uses an explicit bounded scope for semantically distinct durable operations", () => {
+    const input = {
+      jobKey: `0x${"12".repeat(32)}` as const,
+      runtimeCommit: "ab".repeat(20),
+    };
+    const beforeMerge = controlledE2EOperationTrigger({
+      ...input,
+      scope: "github-pr-open",
+    });
+    expect(beforeMerge).toHaveLength(73);
+    expect(
+      controlledE2EOperationTrigger({ ...input, scope: "github-pr-open" }),
+    ).toBe(beforeMerge);
+    expect(
+      controlledE2EOperationTrigger({
+        ...input,
+        scope: `github-merge:${"cd".repeat(20)}`,
+      }),
+    ).not.toBe(beforeMerge);
+    expect(() =>
+      controlledE2EOperationTrigger({ ...input, scope: " " }),
+    ).toThrow("E2E_OPERATION_SCOPE_INVALID");
+  });
+
   it("uses integer six-decimal USDC base units only", () => {
     expect(parseUsdcBaseUnits("100000")).toBe(100_000n);
     expect(() => parseUsdcBaseUnits("0.1")).toThrow(

@@ -107,6 +107,13 @@ file, run:
 PACT_E2E_CONFIRM='RUN arc-testnet 5042002' npm run operator:e2e
 ```
 
+`PACT_E2E_OPERATION_SCOPE` is a required, non-secret semantic idempotency scope.
+Keep it unchanged when reconciling or restarting one phase. Use a new scope only
+for a genuinely new retryable observation, such as `github-pr-open` before merge
+and `github-merge:<commit-sha>` after merge. The operator hashes the job
+identity, runtime commit, and scope into the durable manual trigger key so a
+later retry is distinct without weakening deduplication.
+
 `operator:e2e` validates the manifest and live bytecode/configuration before
 writes, uses a secret external recovery journal for each exact signed
 transaction, simulates each lifecycle call immediately before signing, reads

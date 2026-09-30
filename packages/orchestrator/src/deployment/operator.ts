@@ -45,6 +45,7 @@ import {
   assertControlledE2EAmount,
   assertGrossZeroFeeSettlement,
   calculateGasFee,
+  controlledE2EOperationTrigger,
   controlledE2EWindow,
   parseUsdcBaseUnits,
   reconcileArcNativeBalance,
@@ -169,6 +170,7 @@ async function main(): Promise<void> {
     );
   const journalPath = resolve(required("PACT_E2E_JOURNAL_PATH"));
   const statePath = resolve(required("PACT_E2E_STATE_PATH"));
+  const operationScope = required("PACT_E2E_OPERATION_SCOPE");
   if (
     journalPath.startsWith(`${repositoryRoot}/`) ||
     statePath.startsWith(`${repositoryRoot}/`)
@@ -469,7 +471,11 @@ async function main(): Promise<void> {
       await pactRepository.createPact(pact);
     const operation = await pactRepository.enqueueManualOperation(
       state.pactId,
-      `phase5:${jobKey}:${gitCommit}`,
+      controlledE2EOperationTrigger({
+        jobKey,
+        runtimeCommit: gitCommit,
+        scope: operationScope,
+      }),
     );
     const github = createGitHubPullRequestClient({
       ...(process.env.GITHUB_TOKEN === undefined
