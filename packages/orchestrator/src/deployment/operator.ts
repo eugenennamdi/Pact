@@ -498,12 +498,6 @@ async function main(): Promise<void> {
       );
     await verifyDeploymentIntegrity(rpcUrl, manifest, readTimeoutMs);
     const relayRepository = new PostgresRelayRepository(database);
-    const readyArtifacts = await relayRepository.listReadyToRelayArtifacts(10);
-    const readyArtifact = readyArtifacts.find(
-      (candidate) => candidate.operationId === operation.id,
-    );
-    if (readyArtifact === undefined)
-      throw new Error("durable READY_TO_RELAY artifact is missing");
     const relayChain = createRelayChainClient({ rpcUrl, readTimeoutMs });
     const relayService = createPactRelayService({
       repository: relayRepository,
@@ -517,17 +511,45 @@ async function main(): Promise<void> {
       configuredPactEvaluator: manifest.pactEvaluator.address,
       configuredCommerceContract: manifest.erc8183.proxy,
     });
-    const submitted = await relayService.process();
-    if (submitted.state !== "SUBMITTED")
+    const processed = await relayService.process();
+    if (
+      processed.state !== "SUBMITTED" &&
+      processed.state !== "BROADCAST_UNKNOWN" &&
+      processed.state !== "IDLE"
+    )
       throw new Error(
-        `relay did not submit: ${submitted.state}:${submitted.code ?? ""}`,
+        `relay did not submit or resume: ${processed.state}:${processed.code ?? ""}`,
       );
-    const [settled] = await relayService.reconcile();
-    if (settled?.state !== "SETTLED")
-      throw new Error(`relay did not settle: ${settled?.state ?? "missing"}`);
-    assert(submitted.expectedTxHash !== undefined);
+    const reconciled = await relayService.reconcile();
+    let settlementIntent = await (async () => {
+      const settledResult = reconciled.find(
+        (candidate) => candidate.state === "SETTLED",
+      );
+      if (settledResult?.intentId !== undefined)
+        return relayRepository.getIntent(settledResult.intentId);
+      const settledIntents = await relayRepository.listIntents(["SETTLED"], 10);
+      for (const candidate of settledIntents) {
+        const artifact = await relayRepository.findArtifactByIntent(
+          candidate.id,
+        );
+        if (artifact?.operationId === operation.id) return candidate;
+      }
+      return undefined;
+    })();
+    if (settlementIntent?.state !== "SETTLED")
+      throw new Error(
+        `relay did not settle: ${reconciled[0]?.state ?? processed.state}`,
+      );
+    const readyArtifact = await relayRepository.findArtifactByIntent(
+      settlementIntent.id,
+    );
+    if (readyArtifact === undefined)
+      throw new Error("durable READY_TO_RELAY artifact is missing");
+    const settlementTransactionHash = settlementIntent.canonicalTxHash;
+    if (settlementTransactionHash === null)
+      throw new Error("settled relay intent lacks canonical transaction hash");
     const settlementReceipt = await publicClient.getTransactionReceipt({
-      hash: submitted.expectedTxHash as Hex,
+      hash: settlementTransactionHash,
     });
     const completionEvents = parseEventLogs({
       abi: [jobCompletedEvent],
@@ -662,7 +684,7 @@ async function main(): Promise<void> {
         setBudget.transactionHash,
         submit.transactionHash,
       ]),
-      relay: await gasGroup([submitted.expectedTxHash as Hex]),
+      relay: await gasGroup([settlementTransactionHash]),
     };
     const [implementationReceipt, evaluatorDeploymentReceipt] =
       await Promise.all([
@@ -742,20 +764,17 @@ async function main(): Promise<void> {
       applicationOutflows: 0n,
       gasFees: BigInt(gasAccounting.relay.totalGasFee),
     });
-    const intent =
-      submitted.intentId === undefined
-        ? undefined
-        : await relayRepository.getIntent(submitted.intentId);
-    if (intent?.state !== "SETTLED")
+    settlementIntent = await relayRepository.getIntent(settlementIntent.id);
+    if (settlementIntent?.state !== "SETTLED")
       throw new Error("durable relay intent is not SETTLED");
     const result = {
       jobId: jobId.toString(),
       conditionHash,
       evidenceHash: readyArtifact.attestation.evidenceHash,
-      attestationDigest: prepared.attestationDigest,
-      settlementTransactionHash: submitted.expectedTxHash,
-      eventBlockNumber: intent.eventBlockNumber?.toString(),
-      eventLogIndex: intent.eventLogIndex,
+      attestationDigest: readyArtifact.attestation.digest,
+      settlementTransactionHash,
+      eventBlockNumber: settlementIntent.eventBlockNumber?.toString(),
+      eventLogIndex: settlementIntent.eventLogIndex,
       client: clientAccount.address,
       provider: providerAccount.address,
       budget: amount.toString(),
