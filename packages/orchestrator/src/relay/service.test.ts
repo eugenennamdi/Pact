@@ -286,6 +286,20 @@ class MemoryRelayRepository implements RelayRepository {
     };
     return this.intent;
   }
+  async recoverSuccessReceiptObservationRaces() {
+    if (
+      this.intent?.state !== "INTEGRITY_FAILURE" ||
+      this.intent.code !== "SUCCESS_RECEIPT_WITHOUT_SETTLEMENT"
+    )
+      return 0;
+    this.intent = {
+      ...this.intent,
+      state: "BROADCAST_UNKNOWN",
+      code: "RECONCILIATION_READ_SKEW_RECOVERY",
+      retryable: true,
+    };
+    return 1;
+  }
   async recoverDispatching() {
     if (this.intent?.state !== "DISPATCHING") return 0;
     this.intent = {
@@ -557,6 +571,29 @@ describe("single-dispatch Pact relay service", () => {
     });
     expect(context.sends()).toBe(1);
     context.repository.failSubmittedPersistence = false;
+    await expect(context.service.reconcile()).resolves.toEqual([
+      expect.objectContaining({ state: "SETTLED" }),
+    ]);
+    expect(context.sends()).toBe(1);
+  });
+
+  it("recovers the legacy success-receipt read-skew signature by reads only", async () => {
+    const context = setup();
+    await expect(context.service.process()).resolves.toMatchObject({
+      state: "SUBMITTED",
+    });
+    const submitted = context.repository.intent!;
+    context.repository.intent = {
+      ...submitted,
+      state: "INTEGRITY_FAILURE",
+      code: "SUCCESS_RECEIPT_WITHOUT_SETTLEMENT",
+      retryable: false,
+      receiptStatus: "success",
+      receiptBlockNumber: 101n,
+      receiptBlockHash: `0x${"aa".repeat(32)}`,
+      receiptTransactionIndex: 0,
+      canonicalTxHash: submitted.expectedTxHash,
+    };
     await expect(context.service.reconcile()).resolves.toEqual([
       expect.objectContaining({ state: "SETTLED" }),
     ]);

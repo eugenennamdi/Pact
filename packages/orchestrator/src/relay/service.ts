@@ -51,6 +51,7 @@ export type RelayRepository = Pick<
   | "transitionPreDispatch"
   | "recordBroadcastResult"
   | "transitionOutcome"
+  | "recoverSuccessReceiptObservationRaces"
   | "recoverDispatching"
   | "findArtifactByIntent"
 >;
@@ -463,6 +464,10 @@ export function createPactRelayService(options: PactRelayServiceOptions) {
     },
 
     async reconcile(limit = 10): Promise<readonly RelayProcessResult[]> {
+      await options.repository.recoverSuccessReceiptObservationRaces(
+        options.signer.address,
+        options.configuredChainId,
+      );
       await options.repository.recoverDispatching(
         options.signer.address,
         options.configuredChainId,

@@ -205,6 +205,25 @@ export function reconcileRelayObservation(input: {
   const accepted = observation.snapshot.bindingAccepted;
   const completed = observation.snapshot.jobStatus === COMPLETED;
 
+  if (
+    observation.receipt !== undefined &&
+    observation.receipt.status === "success" &&
+    observation.snapshot.blockNumber < observation.receipt.blockNumber
+  ) {
+    return {
+      state: "BROADCAST_UNKNOWN",
+      code: "RECEIPT_AHEAD_OF_SNAPSHOT",
+      retryable: true,
+      outcome: {
+        canonicalTxHash: observation.receipt.transactionHash,
+        receiptStatus: observation.receipt.status,
+        receiptBlockNumber: observation.receipt.blockNumber,
+        receiptBlockHash: observation.receipt.blockHash,
+        receiptTransactionIndex: observation.receipt.transactionIndex,
+      },
+    };
+  }
+
   if (accepted || completed) {
     if (event === undefined || !accepted || !completed)
       return {

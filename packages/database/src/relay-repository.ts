@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import {
   hashGithubPrMergedCondition,
   hashPactGitHubPrMergedEvidenceV1,
@@ -274,6 +274,39 @@ export class PostgresRelayRepository {
       .orderBy(relayIntents.updatedAt)
       .limit(boundedLimit(limit));
     return rows.map(asRelayIntent);
+  }
+
+  async recoverSuccessReceiptObservationRaces(
+    relayAddress: Address,
+    chainId: bigint,
+  ): Promise<number> {
+    const rows = await this.#database.db
+      .update(relayIntents)
+      .set({
+        state: "BROADCAST_UNKNOWN",
+        code: "RECONCILIATION_READ_SKEW_RECOVERY",
+        retryable: true,
+        version: sql`${relayIntents.version} + 1`,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(relayIntents.relayAddress, getAddress(relayAddress)),
+          eq(relayIntents.chainId, chainId.toString()),
+          eq(relayIntents.state, "INTEGRITY_FAILURE"),
+          eq(relayIntents.code, "SUCCESS_RECEIPT_WITHOUT_SETTLEMENT"),
+          eq(relayIntents.retryable, false),
+          eq(relayIntents.broadcastAttemptCount, 1),
+          eq(relayIntents.receiptStatus, "success"),
+          isNotNull(relayIntents.receiptBlockNumber),
+          isNotNull(relayIntents.receiptBlockHash),
+          isNull(relayIntents.eventBlockNumber),
+          sql`${relayIntents.expectedTxHash} = ${relayIntents.returnedTxHash}`,
+          sql`${relayIntents.expectedTxHash} = ${relayIntents.canonicalTxHash}`,
+        ),
+      )
+      .returning({ id: relayIntents.id });
+    return rows.length;
   }
 
   async recordTerminalBeforeNonce(input: {

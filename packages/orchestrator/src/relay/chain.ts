@@ -225,10 +225,13 @@ export function createRelayChainClient(options: {
 
   async function readSnapshot(
     artifact: ReadyToRelayArtifact,
+    atBlockNumber?: bigint,
   ): Promise<PersistedChainSnapshot> {
     const [runtimeChainId, block] = await Promise.all([
       client.getChainId(),
-      client.getBlock({ blockTag: "latest" }),
+      atBlockNumber === undefined
+        ? client.getBlock({ blockTag: "latest" })
+        : client.getBlock({ blockNumber: atBlockNumber }),
     ]);
     if (block.hash === null)
       throw new RelayRpcReadError("RPC_INVALID_RESPONSE");
@@ -502,25 +505,28 @@ export function createRelayChainClient(options: {
       if (intent.expectedTxHash === null)
         throw new Error("relay intent has no expected transaction hash");
       try {
-        const snapshot = await readSnapshot(artifact);
-        const [completionEvents, nonces, transactionFound, receipt] =
-          await Promise.all([
-            events(artifact, snapshot.blockNumber),
-            readNonces(intent.relayAddress),
-            client
-              .getTransaction({ hash: intent.expectedTxHash })
-              .then(() => true)
-              .catch((error: unknown) => {
-                if (isNotFound(error)) return false;
-                throw error;
-              }),
-            client
-              .getTransactionReceipt({ hash: intent.expectedTxHash })
-              .catch((error: unknown) => {
-                if (isNotFound(error)) return undefined;
-                throw error;
-              }),
-          ]);
+        const [nonces, transactionFound, receipt] = await Promise.all([
+          readNonces(intent.relayAddress),
+          client
+            .getTransaction({ hash: intent.expectedTxHash })
+            .then(() => true)
+            .catch((error: unknown) => {
+              if (isNotFound(error)) return false;
+              throw error;
+            }),
+          client
+            .getTransactionReceipt({ hash: intent.expectedTxHash })
+            .catch((error: unknown) => {
+              if (isNotFound(error)) return undefined;
+              throw error;
+            }),
+        ]);
+        // A receipt can become visible before a concurrent `latest` read has
+        // advanced to the same block. Anchor post-state and event reads to the
+        // receipt block so that transient RPC skew cannot become a terminal
+        // false integrity failure.
+        const snapshot = await readSnapshot(artifact, receipt?.blockNumber);
+        const completionEvents = await events(artifact, snapshot.blockNumber);
         const latestEvent = completionEvents.at(-1);
         const canonicalEventReceipt =
           latestEvent !== undefined &&

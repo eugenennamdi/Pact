@@ -349,6 +349,28 @@ describe("canonical receipt/event/post-state reconciliation", () => {
     ).toMatchObject({ state: "INTEGRITY_FAILURE" });
   });
 
+  it("keeps a success receipt ahead of the sampled snapshot retryable", () => {
+    const artifact = fixture();
+    expect(
+      reconcileRelayObservation({
+        intent: intent(artifact),
+        artifact,
+        observation: {
+          transactionFound: true,
+          receipt: { ...receipt("success"), blockNumber: 102n },
+          completionEvents: [],
+          snapshot: snapshot(artifact),
+          latestNonce: 8,
+          pendingNonce: 8,
+        },
+      }),
+    ).toMatchObject({
+      state: "BROADCAST_UNKNOWN",
+      code: "RECEIPT_AHEAD_OF_SNAPSHOT",
+      retryable: true,
+    });
+  });
+
   it("keeps absence ambiguous regardless of nonce diagnostics", () => {
     const artifact = fixture();
     for (const [latestNonce, pendingNonce] of [
