@@ -6,7 +6,6 @@ import {
   ERC8183_NORMATIVE_REVISION,
   ERC8183_SOURCE_COMMIT,
   assertDeploymentManifest,
-  assertMainnetGate,
 } from "./manifest.js";
 
 const hash = (byte: string): Hex => `0x${byte.repeat(64)}` as Hex;
@@ -137,16 +136,6 @@ describe("deployment manifest", () => {
     expect(() => assertDeploymentManifest(manifest)).toThrow(
       /invalid deployment manifest/,
     );
-  });
-
-  it("fails the mainnet gate on any release identity drift", () => {
-    const manifest = assertDeploymentManifest(validManifest());
-    expect(() =>
-      assertMainnetGate("b".repeat(40), hash("9"), manifest),
-    ).not.toThrow();
-    expect(() =>
-      assertMainnetGate("a".repeat(40), hash("8"), manifest),
-    ).toThrow("MAINNET_BLOCKED_ARTIFACT_DRIFT");
   });
 
   it("records deployment and corrected E2E runtime provenance separately", () => {

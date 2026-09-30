@@ -157,11 +157,17 @@ object. A failed, unavailable, or incomplete check leaves the phase blocked.
 ## Mainnet gate
 
 Mainnet is not a retry of Testnet. It requires explicit Tech Lead approval and a
-Testnet PASS manifest whose E2E runtime commit, ERC-8183 source commit, and
-PactEvaluator creation-artifact hash exactly match the Mainnet release. The
-command enforces this identity. The controlled Mainnet E2E amount has a
-non-configurable ceiling of `100000` base units (0.10 USDC); lowering it is
-allowed, raising it requires a code review.
+valid Testnet PASS manifest. The release gate preserves the historical
+deployment and E2E runtime commits, requires the successful E2E runtime and
+evidence checkpoint to be ancestors of the candidate, requires a clean worktree,
+and rejects changes beneath a versioned Mainnet-critical runtime scope. The only
+exceptions are exact reviewed provenance/control-plane paths;
+evidence-checkpoint files and the mixed manifest validator/operator files are
+additionally pinned by tree or blob identity. This avoids self-referential HEAD
+metadata while failing closed on runtime drift. The ERC-8183 source and
+PactEvaluator creation-artifact identities must still match exactly. The
+controlled Mainnet E2E amount has a non-configurable ceiling of `100000` base
+units (0.10 USDC); lowering it is allowed, raising it requires a code review.
 
 Both Mainnet commands also require a separate commit-bound acknowledgement:
 `PACT_MAINNET_DEPLOY_APPROVAL='APPROVED <full-git-commit>'` for deployment and

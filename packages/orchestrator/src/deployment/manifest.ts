@@ -355,21 +355,4 @@ export async function loadDeploymentManifest(
   );
 }
 
-export function assertMainnetGate(
-  mainnetGitCommit: string,
-  evaluatorCodeHash: Hex,
-  testnet: DeploymentManifest,
-): void {
-  if (
-    testnet.network !== "arc-testnet" ||
-    testnet.testnetGate?.status !== "PASS"
-  )
-    throw new Error("MAINNET_BLOCKED_TESTNET_GATE_MISSING");
-  if (
-    testnet.testnetGate.e2eRuntimeCommit !== mainnetGitCommit ||
-    testnet.testnetGate.erc8183SourceCommit !== ERC8183_SOURCE_COMMIT ||
-    testnet.testnetGate.evaluatorCodeHash.toLowerCase() !==
-      evaluatorCodeHash.toLowerCase()
-  )
-    throw new Error("MAINNET_BLOCKED_ARTIFACT_DRIFT");
-}
+export { assertMainnetGate } from "./mainnet-release.js";
