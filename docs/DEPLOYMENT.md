@@ -119,7 +119,15 @@ version-bound `testnetGate` record to the existing manifest. The root
 the deployed contracts; `e2eRuntimeCommit` separately identifies the corrected
 backend/verifier code that ran the rehearsal.
 
+Arc read-only RPC operations use a bounded 10-second production default and a
+15-second controlled Testnet rehearsal bound, with a hard 30-second maximum and
+zero hidden retries. Relay broadcasting retains its independent five-second
+single-dispatch transport bound; a timeout after dispatch remains
+`BROADCAST_UNKNOWN` and is reconciled rather than resent.
+
 1. Create the ERC-8183 job with PactEvaluator as evaluator and a finite expiry.
+   The controlled Testnet harness uses a two-hour completion deadline and a
+   further four-hour settlement margin (six hours total, below 24 hours).
 2. Bind the canonical `PR_MERGED` condition while the job is `Open`.
 3. Provider sets a small six-decimal USDC budget; client explicitly approves and
    funds that exact token and amount.

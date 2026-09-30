@@ -2,6 +2,26 @@ import type { Hex } from "viem";
 import { assertMainnetGate, type DeploymentManifest } from "./manifest.js";
 
 export const MAINNET_E2E_MAX_USDC_BASE_UNITS = 100_000n;
+export const TESTNET_REHEARSAL_COMPLETION_OFFSET_SECONDS = 2n * 60n * 60n;
+export const TESTNET_REHEARSAL_EXPIRY_OFFSET_SECONDS = 6n * 60n * 60n;
+
+export function controlledE2EWindow(
+  network: "arc-testnet" | "arc-mainnet",
+  now: bigint,
+): { readonly completionDeadline: bigint; readonly expiredAt: bigint } {
+  const completionOffset =
+    network === "arc-testnet"
+      ? TESTNET_REHEARSAL_COMPLETION_OFFSET_SECONDS
+      : 60n * 60n;
+  const expiryOffset =
+    network === "arc-testnet"
+      ? TESTNET_REHEARSAL_EXPIRY_OFFSET_SECONDS
+      : 2n * 60n * 60n;
+  return Object.freeze({
+    completionDeadline: now + completionOffset,
+    expiredAt: now + expiryOffset,
+  });
+}
 
 export function parseUsdcBaseUnits(value: string): bigint {
   if (!/^(0|[1-9]\d*)$/.test(value))

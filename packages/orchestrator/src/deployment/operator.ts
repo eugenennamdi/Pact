@@ -29,7 +29,7 @@ import {
 } from "viem";
 import { privateKeyToAccount, type PrivateKeyAccount } from "viem/accounts";
 import { prepareTransactionRequest } from "viem/actions";
-import { createArcReadClient } from "../chain.js";
+import { DEFAULT_ARC_RPC_TIMEOUT_MS, createArcReadClient } from "../chain.js";
 import { createPhase4AOrchestrator } from "../service.js";
 import { createRelayChainClient } from "../relay/chain.js";
 import { createPactRelayService } from "../relay/service.js";
@@ -45,6 +45,7 @@ import {
   assertControlledE2EAmount,
   assertGrossZeroFeeSettlement,
   calculateGasFee,
+  controlledE2EWindow,
   parseUsdcBaseUnits,
   reconcileArcNativeBalance,
 } from "./safety.js";
@@ -133,6 +134,8 @@ async function main(): Promise<void> {
   const repositoryRoot = resolve(import.meta.dirname, "../../../..");
   const manifestPath = resolve(required("PACT_E2E_MANIFEST_PATH"));
   const manifest = await loadDeploymentManifest(manifestPath);
+  const readTimeoutMs =
+    manifest.network === "arc-testnet" ? 15_000 : DEFAULT_ARC_RPC_TIMEOUT_MS;
   const rpcUrl = required("PACT_E2E_RPC_URL");
   if (
     required("PACT_E2E_CONFIRM") !==
@@ -223,7 +226,7 @@ async function main(): Promise<void> {
       evaluatorArtifactHash,
       await loadDeploymentManifest(required("PACT_TESTNET_MANIFEST_PATH")),
     );
-  await verifyDeploymentIntegrity(rpcUrl, manifest);
+  await verifyDeploymentIntegrity(rpcUrl, manifest, readTimeoutMs);
   const manifestIdentity = keccak256(stringToHex(JSON.stringify(manifest)));
 
   const publicClient = createPublicClient({
@@ -238,7 +241,7 @@ async function main(): Promise<void> {
   ): Promise<DeploymentTransactionRecord> => {
     const existing = await journal.load(step);
     if (existing?.state === "CONFIRMED") return existing;
-    await verifyDeploymentIntegrity(rpcUrl, manifest);
+    await verifyDeploymentIntegrity(rpcUrl, manifest, readTimeoutMs);
     if (existing === undefined || existing.state === "PREPARED")
       await publicClient.call({ account: account.address, to, data });
     const result = await executeDeploymentTransaction({
@@ -318,6 +321,10 @@ async function main(): Promise<void> {
         `${manifest.chainId}:${manifest.pactEvaluator.address}:${Date.now()}`,
       ),
     );
+    const window = controlledE2EWindow(
+      manifest.network,
+      initialBlock.timestamp,
+    );
     state = {
       schemaVersion: 1,
       manifestIdentity,
@@ -328,8 +335,8 @@ async function main(): Promise<void> {
       treasuryBefore: balances[3].toString(),
       evaluatorBefore: balances[4].toString(),
       relayGasBefore: balances[5].toString(),
-      completionDeadline: (initialBlock.timestamp + 3_600n).toString(),
-      expiredAt: (initialBlock.timestamp + 7_200n).toString(),
+      completionDeadline: window.completionDeadline.toString(),
+      expiredAt: window.expiredAt.toString(),
     };
     await mkdir(dirname(statePath), { recursive: true });
     await writeFile(statePath, `${JSON.stringify(state, null, 2)}\n`, {
@@ -472,7 +479,7 @@ async function main(): Promise<void> {
     const orchestrator = createPhase4AOrchestrator({
       repository: pactRepository,
       github,
-      arc: createArcReadClient({ rpcUrl }),
+      arc: createArcReadClient({ rpcUrl, timeoutMs: readTimeoutMs }),
       signer: createPactCompletionSigner({ privateKey: verifierKey }),
       configuredChainId: BigInt(manifest.chainId),
       configuredPactEvaluator: manifest.pactEvaluator.address,
@@ -483,7 +490,7 @@ async function main(): Promise<void> {
       throw new Error(
         `backend did not reach READY_TO_RELAY: ${prepared.state}:${prepared.code ?? ""}`,
       );
-    await verifyDeploymentIntegrity(rpcUrl, manifest);
+    await verifyDeploymentIntegrity(rpcUrl, manifest, readTimeoutMs);
     const relayRepository = new PostgresRelayRepository(database);
     const readyArtifacts = await relayRepository.listReadyToRelayArtifacts(10);
     const readyArtifact = readyArtifacts.find(
@@ -491,7 +498,7 @@ async function main(): Promise<void> {
     );
     if (readyArtifact === undefined)
       throw new Error("durable READY_TO_RELAY artifact is missing");
-    const relayChain = createRelayChainClient({ rpcUrl });
+    const relayChain = createRelayChainClient({ rpcUrl, readTimeoutMs });
     const relayService = createPactRelayService({
       repository: relayRepository,
       chain: relayChain,

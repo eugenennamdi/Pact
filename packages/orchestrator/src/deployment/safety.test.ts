@@ -2,10 +2,13 @@ import { describe, expect, it } from "vitest";
 import {
   ARC_NATIVE_TO_ERC20_SCALE,
   MAINNET_E2E_MAX_USDC_BASE_UNITS,
+  TESTNET_REHEARSAL_COMPLETION_OFFSET_SECONDS,
+  TESTNET_REHEARSAL_EXPIRY_OFFSET_SECONDS,
   assertControlledE2EAmount,
   assertGrossZeroFeeSettlement,
   arcNativeToErc20Truncated,
   calculateGasFee,
+  controlledE2EWindow,
   parseUsdcBaseUnits,
   reconcileArcNativeBalance,
 } from "./safety.js";
@@ -31,6 +34,16 @@ describe("controlled deployment safety", () => {
         MAINNET_E2E_MAX_USDC_BASE_UNITS + 1n,
       ),
     ).toThrow("MAINNET_E2E_AMOUNT_EXCEEDS_FIXED_CAP");
+  });
+
+  it("gives the controlled Testnet rehearsal a two-hour condition and four-hour relay margin", () => {
+    const now = 1_800_000_000n;
+    const window = controlledE2EWindow("arc-testnet", now);
+    expect(TESTNET_REHEARSAL_COMPLETION_OFFSET_SECONDS).toBe(7_200n);
+    expect(TESTNET_REHEARSAL_EXPIRY_OFFSET_SECONDS).toBe(21_600n);
+    expect(window.completionDeadline).toBe(now + 7_200n);
+    expect(window.expiredAt).toBe(window.completionDeadline + 14_400n);
+    expect(window.expiredAt - now).toBeLessThanOrEqual(24n * 60n * 60n);
   });
 
   const exactSettlement = {

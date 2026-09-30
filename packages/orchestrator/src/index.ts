@@ -1,6 +1,7 @@
 export {
   ArcReadError,
   DEFAULT_ARC_RPC_TIMEOUT_MS,
+  MAX_ARC_RPC_TIMEOUT_MS,
   createArcReadClient,
   type ArcReadClient,
   type ArcReadClientOptions,
@@ -28,6 +29,9 @@ export {
   relayErc8183Abi,
 } from "./relay/abi.js";
 export {
+  DEFAULT_RELAY_READ_TIMEOUT_MS,
+  MAX_RELAY_READ_TIMEOUT_MS,
+  RELAY_BROADCAST_TIMEOUT_MS,
   RELAY_GAS_MARGIN_DENOMINATOR,
   RELAY_GAS_MARGIN_NUMERATOR,
   RelayRpcReadError,
@@ -99,11 +103,14 @@ export {
 export {
   ARC_NATIVE_TO_ERC20_SCALE,
   MAINNET_E2E_MAX_USDC_BASE_UNITS,
+  TESTNET_REHEARSAL_COMPLETION_OFFSET_SECONDS,
+  TESTNET_REHEARSAL_EXPIRY_OFFSET_SECONDS,
   assertControlledE2EAmount,
   assertGrossZeroFeeSettlement,
   arcNativeToErc20Truncated,
   authorizeMainnetRun,
   calculateGasFee,
+  controlledE2EWindow,
   parseUsdcBaseUnits,
   reconcileArcNativeBalance,
   type GrossZeroFeeSettlement,

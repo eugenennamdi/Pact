@@ -7,7 +7,8 @@ import {
   type Hex,
 } from "viem";
 
-export const DEFAULT_ARC_RPC_TIMEOUT_MS = 5_000;
+export const DEFAULT_ARC_RPC_TIMEOUT_MS = 10_000;
+export const MAX_ARC_RPC_TIMEOUT_MS = 30_000;
 
 const pactEvaluatorAbi = [
   {
@@ -116,12 +117,12 @@ function classifyRpcError(error: unknown): ArcReadError {
 
 export function createArcReadClient(
   options: ArcReadClientOptions,
-): ArcReadClient {
+): ArcReadClient & { readonly readTimeoutMs: number } {
   const timeoutMs = options.timeoutMs ?? DEFAULT_ARC_RPC_TIMEOUT_MS;
   if (
     !Number.isSafeInteger(timeoutMs) ||
     timeoutMs <= 0 ||
-    timeoutMs > 30_000
+    timeoutMs > MAX_ARC_RPC_TIMEOUT_MS
   ) {
     throw new Error("Arc RPC timeout must be between 1 and 30000 milliseconds");
   }
@@ -130,6 +131,7 @@ export function createArcReadClient(
   });
 
   return Object.freeze({
+    readTimeoutMs: timeoutMs,
     async readSnapshot(input: {
       readonly pactEvaluator: Address;
       readonly commerceContract: Address;

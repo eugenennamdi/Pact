@@ -8,6 +8,10 @@ import {
   type Hex,
 } from "viem";
 import { pactRelayAbi } from "../relay/abi.js";
+import {
+  DEFAULT_ARC_RPC_TIMEOUT_MS,
+  MAX_ARC_RPC_TIMEOUT_MS,
+} from "../chain.js";
 import type { DeploymentManifest } from "./manifest.js";
 
 export const EIP1967_IMPLEMENTATION_SLOT =
@@ -157,9 +161,16 @@ export function assertDeploymentCodeSnapshot(
 export async function verifyDeploymentIntegrity(
   rpcUrl: string,
   manifest: DeploymentManifest,
+  timeoutMs = DEFAULT_ARC_RPC_TIMEOUT_MS,
 ): Promise<void> {
+  if (
+    !Number.isSafeInteger(timeoutMs) ||
+    timeoutMs <= 0 ||
+    timeoutMs > MAX_ARC_RPC_TIMEOUT_MS
+  )
+    throw new DeploymentIntegrityError("ARC_RPC_TIMEOUT_INVALID");
   const client = createPublicClient({
-    transport: http(rpcUrl, { retryCount: 0, timeout: 5_000 }),
+    transport: http(rpcUrl, { retryCount: 0, timeout: timeoutMs }),
   });
   if (BigInt(await client.getChainId()) !== BigInt(manifest.chainId))
     throw new DeploymentIntegrityError("CHAIN_ID_MISMATCH");

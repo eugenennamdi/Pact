@@ -21,6 +21,10 @@ import type { ExactRelayTransactionRequest } from "./signer.js";
 
 export const RELAY_GAS_MARGIN_NUMERATOR = 110n;
 export const RELAY_GAS_MARGIN_DENOMINATOR = 100n;
+export const DEFAULT_RELAY_READ_TIMEOUT_MS = 10_000;
+export const MAX_RELAY_READ_TIMEOUT_MS = 30_000;
+/** Preserve the pre-correction single-send transport timeout independently. */
+export const RELAY_BROADCAST_TIMEOUT_MS = 5_000;
 
 export class RelayRpcReadError extends Error {
   readonly retryable = true;
@@ -192,15 +196,31 @@ function asEvent(log: {
 
 export function createRelayChainClient(options: {
   readonly rpcUrl: string;
-  readonly timeoutMs?: number;
-}): RelayChainClient & { readonly broadcast: RelayBroadcastTransport } {
-  const timeoutMs = options.timeoutMs ?? 5_000;
-  if (!Number.isSafeInteger(timeoutMs) || timeoutMs <= 0 || timeoutMs > 30_000)
+  readonly readTimeoutMs?: number;
+}): RelayChainClient & {
+  readonly readTimeoutMs: number;
+  readonly broadcast: RelayBroadcastTransport;
+} {
+  const readTimeoutMs = options.readTimeoutMs ?? DEFAULT_RELAY_READ_TIMEOUT_MS;
+  if (
+    !Number.isSafeInteger(readTimeoutMs) ||
+    readTimeoutMs <= 0 ||
+    readTimeoutMs > MAX_RELAY_READ_TIMEOUT_MS
+  )
     throw new Error(
       "relay RPC timeout must be between 1 and 30000 milliseconds",
     );
   const client = createPublicClient({
-    transport: http(options.rpcUrl, { retryCount: 0, timeout: timeoutMs }),
+    transport: http(options.rpcUrl, {
+      retryCount: 0,
+      timeout: readTimeoutMs,
+    }),
+  });
+  const broadcastClient = createPublicClient({
+    transport: http(options.rpcUrl, {
+      retryCount: 0,
+      timeout: RELAY_BROADCAST_TIMEOUT_MS,
+    }),
   });
 
   async function readSnapshot(
@@ -532,9 +552,10 @@ export function createRelayChainClient(options: {
 
   return Object.freeze({
     ...chain,
+    readTimeoutMs,
     broadcast: Object.freeze({
       sendRawTransaction: async (serializedTransaction: Hex) =>
-        sendRawTransaction(client, { serializedTransaction }),
+        sendRawTransaction(broadcastClient, { serializedTransaction }),
     }),
   });
 }
