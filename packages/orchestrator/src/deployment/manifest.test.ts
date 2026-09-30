@@ -76,6 +76,23 @@ function validManifest(): Record<string, unknown> {
       evaluatorCodeHash: hash("9"),
       completedAt: "2026-09-29T01:00:00.000Z",
       resultHash: hash("8"),
+      jobId: "2",
+      github: {
+        repository: "pact-protocol/demo",
+        pullRequest: 2,
+        baseBranch: "main",
+        mergeCommitSha: `0x${"1".repeat(40)}`,
+      },
+      conditionHash: hash("a"),
+      evidenceHash: hash("b"),
+      attestationDigest: hash("c"),
+      settlementTransactionHash: hash("d"),
+      event: { blockNumber: "456", logIndex: 0 },
+      runtimeCodeHashes: {
+        erc8183Proxy: keccak256("0x6001"),
+        erc8183Implementation: keccak256("0x6002"),
+        pactEvaluator: keccak256("0x6003"),
+      },
     },
   };
 }
@@ -137,6 +154,15 @@ describe("deployment manifest", () => {
     expect(manifest.gitCommit).toBe("a".repeat(40));
     expect(manifest.testnetGate?.deploymentGitCommit).toBe("a".repeat(40));
     expect(manifest.testnetGate?.e2eRuntimeCommit).toBe("b".repeat(40));
+  });
+
+  it("rejects Testnet gate runtime-code provenance drift", () => {
+    const manifest = validManifest();
+    object(object(manifest, "testnetGate"), "runtimeCodeHashes").pactEvaluator =
+      hash("f");
+    expect(() => assertDeploymentManifest(manifest)).toThrow(
+      /testnetGate\.runtimeCodeHashes\.pactEvaluator/,
+    );
   });
 
   it("fails closed on runtime bytecode or EIP-1967 implementation drift", () => {

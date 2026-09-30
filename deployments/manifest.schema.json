@@ -149,7 +149,15 @@
         "erc8183SourceCommit",
         "evaluatorCodeHash",
         "completedAt",
-        "resultHash"
+        "resultHash",
+        "jobId",
+        "github",
+        "conditionHash",
+        "evidenceHash",
+        "attestationDigest",
+        "settlementTransactionHash",
+        "event",
+        "runtimeCodeHashes"
       ],
       "properties": {
         "status": { "const": "PASS" },
@@ -166,7 +174,54 @@
         },
         "evaluatorCodeHash": { "$ref": "#/$defs/hash" },
         "completedAt": { "type": "string", "format": "date-time" },
-        "resultHash": { "$ref": "#/$defs/hash" }
+        "resultHash": { "$ref": "#/$defs/hash" },
+        "jobId": { "$ref": "#/$defs/positiveIntegerString" },
+        "github": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "repository",
+            "pullRequest",
+            "baseBranch",
+            "mergeCommitSha"
+          ],
+          "properties": {
+            "repository": { "type": "string", "minLength": 1 },
+            "pullRequest": { "type": "integer", "minimum": 1 },
+            "baseBranch": { "type": "string", "minLength": 1 },
+            "mergeCommitSha": {
+              "type": "string",
+              "pattern": "^0x[0-9a-f]{40}$"
+            }
+          }
+        },
+        "conditionHash": { "$ref": "#/$defs/hash" },
+        "evidenceHash": { "$ref": "#/$defs/hash" },
+        "attestationDigest": { "$ref": "#/$defs/hash" },
+        "settlementTransactionHash": { "$ref": "#/$defs/hash" },
+        "event": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["blockNumber", "logIndex"],
+          "properties": {
+            "blockNumber": { "$ref": "#/$defs/positiveIntegerString" },
+            "logIndex": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "runtimeCodeHashes": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "erc8183Proxy",
+            "erc8183Implementation",
+            "pactEvaluator"
+          ],
+          "properties": {
+            "erc8183Proxy": { "$ref": "#/$defs/hash" },
+            "erc8183Implementation": { "$ref": "#/$defs/hash" },
+            "pactEvaluator": { "$ref": "#/$defs/hash" }
+          }
+        }
       }
     }
   },
@@ -174,6 +229,7 @@
     "address": { "type": "string", "pattern": "^0x[0-9a-fA-F]{40}$" },
     "hash": { "type": "string", "pattern": "^0x[0-9a-fA-F]{64}$" },
     "integerString": { "type": "string", "pattern": "^(0|[1-9][0-9]*)$" },
+    "positiveIntegerString": { "type": "string", "pattern": "^[1-9][0-9]*$" },
     "verification": { "enum": ["VERIFIED", "PENDING", "UNAVAILABLE"] }
   }
 }

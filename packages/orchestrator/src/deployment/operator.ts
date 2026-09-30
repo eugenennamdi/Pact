@@ -818,6 +818,34 @@ async function main(): Promise<void> {
           evaluatorCodeHash: evaluatorArtifactHash,
           completedAt: new Date().toISOString(),
           resultHash,
+          jobId: jobId.toString(),
+          github: {
+            repository: condition.repository,
+            pullRequest: condition.pullRequest,
+            baseBranch: condition.baseBranch,
+            mergeCommitSha: readyArtifact.evidence.mergeCommitSha,
+          },
+          conditionHash,
+          evidenceHash: readyArtifact.attestation.evidenceHash,
+          attestationDigest: readyArtifact.attestation.digest,
+          settlementTransactionHash,
+          event: {
+            blockNumber:
+              settlementIntent.eventBlockNumber?.toString() ??
+              (() => {
+                throw new Error("settled relay intent lacks event block");
+              })(),
+            logIndex:
+              settlementIntent.eventLogIndex ??
+              (() => {
+                throw new Error("settled relay intent lacks event log index");
+              })(),
+          },
+          runtimeCodeHashes: {
+            erc8183Proxy: manifest.erc8183.proxyCodeHash,
+            erc8183Implementation: manifest.erc8183.implementationCodeHash,
+            pactEvaluator: manifest.pactEvaluator.codeHash,
+          },
         },
       });
       const temporary = `${manifestPath}.tmp`;

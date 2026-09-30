@@ -74,6 +74,26 @@ export interface DeploymentManifest {
     readonly evaluatorCodeHash: Hex;
     readonly completedAt: string;
     readonly resultHash: Hex;
+    readonly jobId: string;
+    readonly github: {
+      readonly repository: string;
+      readonly pullRequest: number;
+      readonly baseBranch: string;
+      readonly mergeCommitSha: Hex;
+    };
+    readonly conditionHash: Hex;
+    readonly evidenceHash: Hex;
+    readonly attestationDigest: Hex;
+    readonly settlementTransactionHash: Hex;
+    readonly event: {
+      readonly blockNumber: string;
+      readonly logIndex: number;
+    };
+    readonly runtimeCodeHashes: {
+      readonly erc8183Proxy: Hex;
+      readonly erc8183Implementation: Hex;
+      readonly pactEvaluator: Hex;
+    };
   };
 }
 
@@ -234,6 +254,81 @@ export function assertDeploymentManifest(input: unknown): DeploymentManifest {
     hash(gate.evaluatorCodeHash, "testnetGate.evaluatorCodeHash");
     hash(gate.resultHash, "testnetGate.resultHash");
     isoDate(gate.completedAt, "testnetGate.completedAt");
+    const jobId = string(gate.jobId, "testnetGate.jobId");
+    if (!/^[1-9]\d*$/.test(jobId))
+      throw new Error("invalid deployment manifest: testnetGate.jobId");
+    const github = record(gate.github, "testnetGate.github");
+    string(github.repository, "testnetGate.github.repository");
+    const pullRequest = github.pullRequest;
+    if (
+      typeof pullRequest !== "number" ||
+      !Number.isSafeInteger(pullRequest) ||
+      pullRequest <= 0
+    )
+      throw new Error(
+        "invalid deployment manifest: testnetGate.github.pullRequest",
+      );
+    string(github.baseBranch, "testnetGate.github.baseBranch");
+    const mergeCommitSha = string(
+      github.mergeCommitSha,
+      "testnetGate.github.mergeCommitSha",
+    );
+    if (!/^0x[0-9a-f]{40}$/.test(mergeCommitSha))
+      throw new Error(
+        "invalid deployment manifest: testnetGate.github.mergeCommitSha",
+      );
+    hash(gate.conditionHash, "testnetGate.conditionHash");
+    hash(gate.evidenceHash, "testnetGate.evidenceHash");
+    hash(gate.attestationDigest, "testnetGate.attestationDigest");
+    hash(
+      gate.settlementTransactionHash,
+      "testnetGate.settlementTransactionHash",
+    );
+    const event = record(gate.event, "testnetGate.event");
+    const eventBlockNumber = string(
+      event.blockNumber,
+      "testnetGate.event.blockNumber",
+    );
+    if (!/^[1-9]\d*$/.test(eventBlockNumber))
+      throw new Error(
+        "invalid deployment manifest: testnetGate.event.blockNumber",
+      );
+    if (
+      typeof event.logIndex !== "number" ||
+      !Number.isSafeInteger(event.logIndex) ||
+      event.logIndex < 0
+    )
+      throw new Error(
+        "invalid deployment manifest: testnetGate.event.logIndex",
+      );
+    const runtimeCodeHashes = record(
+      gate.runtimeCodeHashes,
+      "testnetGate.runtimeCodeHashes",
+    );
+    literal(
+      hash(
+        runtimeCodeHashes.erc8183Proxy,
+        "testnetGate.runtimeCodeHashes.erc8183Proxy",
+      ),
+      hash(erc.proxyCodeHash, "erc8183.proxyCodeHash"),
+      "testnetGate.runtimeCodeHashes.erc8183Proxy",
+    );
+    literal(
+      hash(
+        runtimeCodeHashes.erc8183Implementation,
+        "testnetGate.runtimeCodeHashes.erc8183Implementation",
+      ),
+      hash(erc.implementationCodeHash, "erc8183.implementationCodeHash"),
+      "testnetGate.runtimeCodeHashes.erc8183Implementation",
+    );
+    literal(
+      hash(
+        runtimeCodeHashes.pactEvaluator,
+        "testnetGate.runtimeCodeHashes.pactEvaluator",
+      ),
+      hash(evaluator.codeHash, "pactEvaluator.codeHash"),
+      "testnetGate.runtimeCodeHashes.pactEvaluator",
+    );
   }
 
   address(root.deployer, "deployer");

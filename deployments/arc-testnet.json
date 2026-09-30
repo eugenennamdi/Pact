@@ -52,7 +52,36 @@
   },
   "sourceVerification": {
     "erc8183Implementation": "UNAVAILABLE",
-    "erc8183Proxy": "UNAVAILABLE",
+    "erc8183Proxy": "VERIFIED",
     "pactEvaluator": "UNAVAILABLE"
+  },
+  "testnetGate": {
+    "status": "PASS",
+    "deploymentGitCommit": "5e9214f996ef48bc465ca2ee6a4f8e30d782a362",
+    "e2eRuntimeCommit": "f8c7c6240f0655e86cdd156bcd4f8792ab672549",
+    "erc8183SourceCommit": "142e669c1fd318486a4628395b629f033654dd06",
+    "evaluatorCodeHash": "0xd965f1c6b1574e32ca258e300558eb37bfef0ec253c0a02a4ebf7d05a546b487",
+    "completedAt": "2026-09-30T19:28:51.249Z",
+    "resultHash": "0xc64d4fb68a50681ba18958707c0ea84518ce7014a5e787cc0be2e7dd3b2261ec",
+    "jobId": "2",
+    "github": {
+      "repository": "eugenennamdi/pact-arc-demo",
+      "pullRequest": 2,
+      "baseBranch": "main",
+      "mergeCommitSha": "0x0697674a4dcdf47360ce1de469903284bafee616"
+    },
+    "conditionHash": "0x8fd8bbc6d7a269a730a7ffd88177763edff507206d54fac939c11f5d8a144f60",
+    "evidenceHash": "0xc626568af1aaa8c1d3a2bdaa0ffc04db05f274e7519a182f469774481aaa407f",
+    "attestationDigest": "0x8a115f4790006029c92215d32ebf6d6ee6e396221cb64b81be694b88257d6b69",
+    "settlementTransactionHash": "0xb0524bb47bebf540f05bf4c4c04d35cd91e73004632dec22b7fd5b15ebecde10",
+    "event": {
+      "blockNumber": "64825394",
+      "logIndex": 0
+    },
+    "runtimeCodeHashes": {
+      "erc8183Proxy": "0xd8213adf7f6483871a80a460216b7cd380d7c406ae464724918f93cf25acbe7e",
+      "erc8183Implementation": "0xb9ec629eee41a3b0d6d13aeb7fe0668a302ec3c89c369fabfc08a8d232537b2f",
+      "pactEvaluator": "0x2dc026033b0a08ae8be23d2eb1bde4dc17808ca5f314841dd2ef7996f34f7a25"
+    }
   }
 }
