@@ -5,7 +5,6 @@ import { assertDeploymentManifest } from "./manifest.js";
 import {
   APPROVED_CONTROL_PATHS,
   APPROVED_MANIFEST_VALIDATOR_BLOB,
-  TESTNET_E2E_RUNTIME_COMMIT,
   TESTNET_EVIDENCE_CHECKPOINT,
   assertMainnetGate,
   type ReleaseGitInspection,
@@ -22,7 +21,7 @@ function inspection(
     ancestor: boolean;
     checkpointAncestor: boolean;
     changed: readonly string[];
-    checkpointManifest: string;
+    releaseManifest: string;
     locked: boolean;
     validatorBlob: string;
   }> = {},
@@ -32,7 +31,7 @@ function inspection(
     ancestor: true,
     checkpointAncestor: true,
     changed: APPROVED_CONTROL_PATHS,
-    checkpointManifest: manifestJson,
+    releaseManifest: manifestJson,
     locked: true,
     validatorBlob: APPROVED_MANIFEST_VALIDATOR_BLOB,
     ...overrides,
@@ -46,7 +45,7 @@ function inspection(
         : values.ancestor,
     changedPaths: () => values.changed,
     pathEquals: () => values.locked,
-    fileAt: () => values.checkpointManifest,
+    fileAt: () => values.releaseManifest,
     blobAt: () => values.validatorBlob,
   };
 }
@@ -79,7 +78,7 @@ describe("Mainnet release gate", () => {
     delete value.testnetGate;
     expect(() =>
       assertMainnetGate(
-        TESTNET_E2E_RUNTIME_COMMIT,
+        manifest.testnetGate!.e2eRuntimeCommit,
         evaluatorHash,
         value as never,
         {
@@ -134,9 +133,9 @@ describe("Mainnet release gate", () => {
     );
   });
 
-  it("blocks changes to evidence-locked control files", () => {
+  it("blocks changes to runtime-locked control files", () => {
     expect(() => check(manifest, inspection({ locked: false }))).toThrow(
-      "MAINNET_BLOCKED_CONTROL_DRIFT",
+      "MAINNET_BLOCKED_RUNTIME_DRIFT",
     );
   });
 
@@ -146,15 +145,15 @@ describe("Mainnet release gate", () => {
     ).toThrow("MAINNET_BLOCKED_CONTROL_DRIFT");
   });
 
-  it("keeps the historical E2E runtime identity immutable", () => {
-    expect(manifest.testnetGate?.e2eRuntimeCommit).toBe(
-      TESTNET_E2E_RUNTIME_COMMIT,
-    );
+  it("uses the freshly certified E2E runtime as the immutable runtime root", () => {
     const value = mutableManifest();
     (value.testnetGate as Record<string, unknown>).e2eRuntimeCommit =
       "d".repeat(40);
-    expect(() => check(assertDeploymentManifest(value))).toThrow(
-      "MAINNET_BLOCKED_TESTNET_PROVENANCE_DRIFT",
-    );
+    expect(() =>
+      check(
+        assertDeploymentManifest(value),
+        inspection({ ancestor: false, releaseManifest: JSON.stringify(value) }),
+      ),
+    ).toThrow("MAINNET_BLOCKED_NON_DESCENDANT_RELEASE");
   });
 });

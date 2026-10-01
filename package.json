@@ -23,6 +23,7 @@
     "test:database-live": "npm run build --workspace=@pact/database && npm run test:live --workspace=@pact/database",
     "test:relay-e2e": "npm run build --workspace=@pact/database && npm run build --workspace=@pact/orchestrator && npm run test:e2e --workspace=@pact/orchestrator",
     "test:phase5-local": "npm run build --workspace=@pact/database && npm run build --workspace=@pact/orchestrator && npm run test:phase5-local --workspace=@pact/orchestrator",
+    "test:phase5-staged-local": "npm run build --workspace=@pact/database && npm run build --workspace=@pact/orchestrator && npm run test:phase5-staged-local --workspace=@pact/orchestrator",
     "typecheck": "npm run typecheck --workspaces --if-present"
   },
   "devDependencies": {

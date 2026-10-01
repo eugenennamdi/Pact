@@ -15,7 +15,10 @@ import {
   normalizeGithubPrMergedCondition,
   normalizePactJobIdentity,
 } from "@pact/protocol";
-import type { GitHubPullRequestClient } from "@pact/verifier/github";
+import {
+  verifyGitHubPrMerged,
+  type GitHubPullRequestClient,
+} from "@pact/verifier/github";
 import { createPactCompletionSigner } from "@pact/verifier/signer";
 import {
   createPublicClient,
@@ -250,6 +253,58 @@ async function main(): Promise<void> {
       event: "PR_MERGED",
     });
     const conditionHash = hashGithubPrMergedCondition(condition);
+    let merged = false;
+    let mergedAt = block.timestamp;
+    const github: GitHubPullRequestClient = {
+      getPullRequest: async () => ({
+        ok: true,
+        value: {
+          number: condition.pullRequest,
+          state: merged ? "closed" : "open",
+          merged,
+          mergedAt: merged
+            ? new Date(Number(mergedAt) * 1_000)
+                .toISOString()
+                .replace(".000Z", "Z")
+            : null,
+          mergeCommitSha: merged
+            ? "0123456789abcdef0123456789abcdef01234567"
+            : null,
+          baseRepository: condition.repository,
+          baseBranch: condition.baseBranch,
+          privateRepository: false,
+        },
+      }),
+      checkPullRequestMerged: async () => ({
+        ok: true,
+        value: { merged },
+      }),
+    };
+    const initial = await verifyGitHubPrMerged({
+      condition,
+      completionDeadline,
+      observedAt: block.timestamp,
+      client: github,
+    });
+    assert.deepEqual(initial, {
+      status: "NOT_SATISFIED",
+      reason: "PULL_REQUEST_NOT_MERGED",
+      retryable: true,
+    });
+    const stagedTables = [
+      "pact_records",
+      "operations",
+      "verification_attempts",
+      "evidence_records",
+      "attestations",
+      "relay_intents",
+    ] as const;
+    for (const table of stagedTables) {
+      const rows = await database.sql.unsafe<{ count: number }[]>(
+        `select count(*)::int as count from ${table}`,
+      );
+      assert.equal(rows[0]?.count, 0, `${table} changed while condition false`);
+    }
     await write(client, commerce, erc8183.abi, "createJob", [
       provider,
       evaluator,
@@ -295,26 +350,8 @@ async function main(): Promise<void> {
     })) as { readonly budget: bigint; readonly settledAmount: bigint };
 
     const now = (await publicClient.getBlock()).timestamp;
-    const mergedAt = now - 10n;
-    const metadata = {
-      number: condition.pullRequest,
-      state: "closed" as const,
-      merged: true,
-      mergedAt: new Date(Number(mergedAt) * 1_000)
-        .toISOString()
-        .replace(".000Z", "Z"),
-      mergeCommitSha: "0123456789abcdef0123456789abcdef01234567",
-      baseRepository: condition.repository,
-      baseBranch: condition.baseBranch,
-      privateRepository: false,
-    };
-    const github: GitHubPullRequestClient = {
-      getPullRequest: async () => ({ ok: true, value: metadata }),
-      checkPullRequestMerged: async () => ({
-        ok: true,
-        value: { merged: true },
-      }),
-    };
+    mergedAt = now - 10n;
+    merged = true;
     const pactRepository = new PostgresPactRepository(database);
     const jobKey = hashPactJobIdentity(
       normalizePactJobIdentity({
@@ -335,9 +372,10 @@ async function main(): Promise<void> {
       completionDeadline,
     };
     await pactRepository.createPact(pact);
+    const triggerKey = `phase5-local:${crypto.randomUUID()}`;
     const operation = await pactRepository.enqueueManualOperation(
       pact.id,
-      `phase5-local:${crypto.randomUUID()}`,
+      triggerKey,
     );
     const orchestrator = createPhase4AOrchestrator({
       repository: pactRepository,
@@ -382,6 +420,11 @@ async function main(): Promise<void> {
     const [settled] = await relayService.reconcile();
     assert.equal(settled?.state, "SETTLED");
     assert.equal(dispatches, 1);
+    const repeated = await pactRepository.enqueueManualOperation(
+      pact.id,
+      triggerKey,
+    );
+    assert.equal(repeated.id, operation.id);
     assert(submitted.expectedTxHash !== undefined);
     const receipt = await publicClient.getTransactionReceipt({
       hash: submitted.expectedTxHash as Hex,

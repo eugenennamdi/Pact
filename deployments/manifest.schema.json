@@ -223,13 +223,183 @@
           }
         }
       }
+    },
+    "mainnetGate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "status",
+        "chainId",
+        "mainnetReleaseCommit",
+        "erc8183SourceCommit",
+        "completedAt",
+        "contracts",
+        "runtimeCodeHashes",
+        "roles",
+        "deploymentTransactions",
+        "jobId",
+        "github",
+        "conditionHash",
+        "evidenceHash",
+        "attestationDigest",
+        "settlement",
+        "broadcastAttemptCount",
+        "economics",
+        "finalState",
+        "resultHash"
+      ],
+      "properties": {
+        "schemaVersion": { "const": 1 },
+        "status": { "const": "PASS" },
+        "chainId": { "const": "5042" },
+        "mainnetReleaseCommit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "erc8183SourceCommit": {
+          "const": "142e669c1fd318486a4628395b629f033654dd06"
+        },
+        "completedAt": { "type": "string", "format": "date-time" },
+        "contracts": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["implementation", "proxy", "pactEvaluator"],
+          "properties": {
+            "implementation": { "$ref": "#/$defs/address" },
+            "proxy": { "$ref": "#/$defs/address" },
+            "pactEvaluator": { "$ref": "#/$defs/address" }
+          }
+        },
+        "runtimeCodeHashes": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "erc8183Implementation",
+            "erc8183Proxy",
+            "pactEvaluator"
+          ],
+          "properties": {
+            "erc8183Implementation": { "$ref": "#/$defs/hash" },
+            "erc8183Proxy": { "$ref": "#/$defs/hash" },
+            "pactEvaluator": { "$ref": "#/$defs/hash" }
+          }
+        },
+        "roles": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["operator", "treasury", "provider", "verifier", "relay"],
+          "properties": {
+            "operator": { "$ref": "#/$defs/address" },
+            "treasury": { "$ref": "#/$defs/address" },
+            "provider": { "$ref": "#/$defs/address" },
+            "verifier": { "$ref": "#/$defs/address" },
+            "relay": { "$ref": "#/$defs/address" }
+          }
+        },
+        "deploymentTransactions": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["implementation", "proxy", "allowUsdc", "evaluator"],
+          "properties": {
+            "implementation": { "$ref": "#/$defs/hash" },
+            "proxy": { "$ref": "#/$defs/hash" },
+            "allowUsdc": { "$ref": "#/$defs/hash" },
+            "evaluator": { "$ref": "#/$defs/hash" }
+          }
+        },
+        "jobId": { "$ref": "#/$defs/positiveIntegerString" },
+        "github": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "repository",
+            "pullRequest",
+            "baseBranch",
+            "mergeCommitSha",
+            "mergedAt"
+          ],
+          "properties": {
+            "repository": { "type": "string", "minLength": 1 },
+            "pullRequest": { "type": "integer", "minimum": 1 },
+            "baseBranch": { "type": "string", "minLength": 1 },
+            "mergeCommitSha": { "$ref": "#/$defs/gitCommitSha" },
+            "mergedAt": { "type": "string", "format": "date-time" }
+          }
+        },
+        "conditionHash": { "$ref": "#/$defs/hash" },
+        "evidenceHash": { "$ref": "#/$defs/hash" },
+        "attestationDigest": { "$ref": "#/$defs/hash" },
+        "settlement": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "transactionHash",
+            "receiptBlockNumber",
+            "receiptBlockHash",
+            "pactCompletionAccepted",
+            "jobCompleted"
+          ],
+          "properties": {
+            "transactionHash": { "$ref": "#/$defs/hash" },
+            "receiptBlockNumber": { "$ref": "#/$defs/positiveIntegerString" },
+            "receiptBlockHash": { "$ref": "#/$defs/hash" },
+            "pactCompletionAccepted": { "$ref": "#/$defs/eventCoordinate" },
+            "jobCompleted": { "$ref": "#/$defs/eventCoordinate" }
+          }
+        },
+        "broadcastAttemptCount": { "const": 1 },
+        "economics": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "budget",
+            "grossFunding",
+            "grossProviderPayout",
+            "treasuryApplicationPayout",
+            "evaluatorApplicationPayout",
+            "settledAmount",
+            "completionReason"
+          ],
+          "properties": {
+            "budget": { "$ref": "#/$defs/positiveIntegerString" },
+            "grossFunding": { "$ref": "#/$defs/positiveIntegerString" },
+            "grossProviderPayout": { "$ref": "#/$defs/positiveIntegerString" },
+            "treasuryApplicationPayout": { "const": "0" },
+            "evaluatorApplicationPayout": { "const": "0" },
+            "settledAmount": { "const": "0" },
+            "completionReason": { "$ref": "#/$defs/hash" }
+          }
+        },
+        "finalState": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["jobStatus", "bindingAccepted"],
+          "properties": {
+            "jobStatus": { "const": 3 },
+            "bindingAccepted": { "const": true }
+          }
+        },
+        "resultHash": { "$ref": "#/$defs/hash" }
+      }
     }
   },
   "$defs": {
     "address": { "type": "string", "pattern": "^0x[0-9a-fA-F]{40}$" },
     "hash": { "type": "string", "pattern": "^0x[0-9a-fA-F]{64}$" },
+    "gitCommitSha": { "type": "string", "pattern": "^0x[0-9a-f]{40}$" },
     "integerString": { "type": "string", "pattern": "^(0|[1-9][0-9]*)$" },
     "positiveIntegerString": { "type": "string", "pattern": "^[1-9][0-9]*$" },
-    "verification": { "enum": ["VERIFIED", "PENDING", "UNAVAILABLE"] }
+    "verification": { "enum": ["VERIFIED", "PENDING", "UNAVAILABLE"] },
+    "eventCoordinate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["blockNumber", "blockHash", "logIndex"],
+      "properties": {
+        "blockNumber": { "$ref": "#/$defs/positiveIntegerString" },
+        "blockHash": { "$ref": "#/$defs/hash" },
+        "logIndex": { "type": "integer", "minimum": 0 }
+      }
+    }
   }
 }

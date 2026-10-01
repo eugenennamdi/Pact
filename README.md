@@ -79,5 +79,5 @@ completion call:
 
 ```bash
 PACT_PHASE5_LOCAL_E2E=1 DATABASE_URL=postgresql://.../pact_phase5_local_test \
-  npm run test:phase5-local
+  npm run test:phase5-staged-local
 ```

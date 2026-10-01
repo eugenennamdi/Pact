@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import { readFile, rename, writeFile } from "node:fs/promises";
+import { resolve } from "node:path";
 import {
   PostgresPactRepository,
   PostgresRelayRepository,
@@ -14,7 +14,10 @@ import {
   normalizeGithubPrMergedCondition,
   normalizePactJobIdentity,
 } from "@pact/protocol";
-import { createGitHubPullRequestClient } from "@pact/verifier/github";
+import {
+  createGitHubPullRequestClient,
+  verifyGitHubPrMerged,
+} from "@pact/verifier/github";
 import { createPactCompletionSigner } from "@pact/verifier/signer";
 import {
   createPublicClient,
@@ -40,8 +43,10 @@ import {
   assertDeploymentManifest,
   assertMainnetGate,
   loadDeploymentManifest,
+  mainnetGateResultHash,
 } from "./manifest.js";
 import {
+  assertRemainingRunAffordability,
   assertControlledE2EAmount,
   assertGrossZeroFeeSettlement,
   calculateGasFee,
@@ -49,7 +54,15 @@ import {
   controlledE2EWindow,
   parseUsdcBaseUnits,
   reconcileArcNativeBalance,
+  type ControlledFinancialStep,
 } from "./safety.js";
+import {
+  FileControlledOperatorState,
+  advanceControlledOperatorState,
+  assertControlledOperatorIdentity,
+  parseControlledOperatorAction,
+  type ControlledOperatorState,
+} from "./staged-operator.js";
 import {
   executeDeploymentTransaction,
   type DeploymentTransactionRecord,
@@ -95,20 +108,6 @@ interface FoundryArtifact {
   readonly bytecode: { readonly object: Hex };
 }
 
-interface OperatorState {
-  readonly schemaVersion: 1;
-  readonly manifestIdentity: Hex;
-  readonly pactId: string;
-  readonly clientBefore: string;
-  readonly providerBefore: string;
-  readonly escrowBefore: string;
-  readonly treasuryBefore: string;
-  readonly evaluatorBefore: string;
-  readonly relayGasBefore: string;
-  readonly completionDeadline: string;
-  readonly expiredAt: string;
-}
-
 function required(name: string): string {
   const value = process.env[name];
   if (value === undefined || value.trim() === "")
@@ -131,7 +130,7 @@ function uuidFromHash(value: Hex): string {
   return `${raw.slice(0, 8)}-${raw.slice(8, 12)}-5${raw.slice(13, 16)}-a${raw.slice(17, 20)}-${raw.slice(20, 32)}`;
 }
 
-async function main(): Promise<void> {
+async function runControlledOperator(): Promise<void> {
   const repositoryRoot = resolve(import.meta.dirname, "../../../..");
   const manifestPath = resolve(required("PACT_E2E_MANIFEST_PATH"));
   const manifest = await loadDeploymentManifest(manifestPath);
@@ -171,6 +170,7 @@ async function main(): Promise<void> {
   const journalPath = resolve(required("PACT_E2E_JOURNAL_PATH"));
   const statePath = resolve(required("PACT_E2E_STATE_PATH"));
   const operationScope = required("PACT_E2E_OPERATION_SCOPE");
+  const action = parseControlledOperatorAction(required("PACT_E2E_ACTION"));
   if (
     journalPath.startsWith(`${repositoryRoot}/`) ||
     statePath.startsWith(`${repositoryRoot}/`)
@@ -178,7 +178,6 @@ async function main(): Promise<void> {
     throw new Error(
       "operator journal and state must be outside the repository",
     );
-
   const gitCommit = execFileSync("git", ["rev-parse", "HEAD"], {
     cwd: repositoryRoot,
     encoding: "utf8",
@@ -234,9 +233,126 @@ async function main(): Promise<void> {
   const publicClient = createPublicClient({
     transport: http(rpcUrl, { retryCount: 0, timeout: 10_000 }),
   });
+  const balance = (owner: Address) =>
+    publicClient.readContract({
+      address: manifest.usdc.address,
+      abi: usdcArtifact.abi,
+      functionName: "balanceOf",
+      args: [owner],
+    }) as Promise<bigint>;
+  const condition = normalizeGithubPrMergedCondition({
+    provider: "github",
+    repository: required("PACT_E2E_GITHUB_REPOSITORY"),
+    pullRequest: Number(required("PACT_E2E_GITHUB_PULL_REQUEST")),
+    baseBranch: required("PACT_E2E_GITHUB_BASE_BRANCH"),
+    event: "PR_MERGED",
+  });
+  const conditionHash = hashGithubPrMergedCondition(condition);
+  const stateStore = FileControlledOperatorState.open(statePath);
+  const loadedState = await stateStore.load();
+  let state: ControlledOperatorState;
+  if (loadedState === undefined) {
+    if (action !== "prepare") throw new Error("OPERATOR_PREPARE_REQUIRED");
+    const [balances, initialBlock] = await Promise.all([
+      Promise.all([
+        balance(clientAccount.address),
+        balance(providerAccount.address),
+        balance(manifest.erc8183.proxy),
+        balance(manifest.erc8183.treasury),
+        balance(manifest.pactEvaluator.address),
+        publicClient.getBalance({ address: relayAccount.address }),
+      ]),
+      publicClient.getBlock(),
+    ]);
+    const seed = keccak256(
+      stringToHex(
+        `${manifest.chainId}:${manifest.pactEvaluator.address}:${Date.now()}`,
+      ),
+    );
+    const window = controlledE2EWindow(
+      manifest.network,
+      initialBlock.timestamp,
+    );
+    state = {
+      schemaVersion: 2,
+      stage: "DEPLOYED",
+      manifestIdentity,
+      network: manifest.network,
+      chainId: manifest.chainId,
+      operationScope,
+      pactId: uuidFromHash(seed),
+      commerceContract: manifest.erc8183.proxy,
+      pactEvaluator: manifest.pactEvaluator.address,
+      client: clientAccount.address,
+      provider: providerAccount.address,
+      verifier: verifierAccount.address,
+      relay: relayAccount.address,
+      repository: condition.repository,
+      pullRequest: condition.pullRequest,
+      baseBranch: condition.baseBranch,
+      conditionHash,
+      amount: amount.toString(),
+      clientBefore: balances[0].toString(),
+      providerBefore: balances[1].toString(),
+      escrowBefore: balances[2].toString(),
+      treasuryBefore: balances[3].toString(),
+      evaluatorBefore: balances[4].toString(),
+      relayGasBefore: balances[5].toString(),
+      completionDeadline: window.completionDeadline.toString(),
+      expiredAt: window.expiredAt.toString(),
+      transactions: {},
+      affordabilityChecks: [],
+    };
+    await stateStore.create(state);
+  } else {
+    state = loadedState;
+  }
+  assertControlledOperatorIdentity(state, {
+    manifestIdentity,
+    network: manifest.network,
+    chainId: manifest.chainId,
+    operationScope,
+    commerceContract: manifest.erc8183.proxy,
+    pactEvaluator: manifest.pactEvaluator.address,
+    client: clientAccount.address,
+    provider: providerAccount.address,
+    verifier: verifierAccount.address,
+    relay: relayAccount.address,
+    repository: condition.repository,
+    pullRequest: condition.pullRequest,
+    baseBranch: condition.baseBranch,
+    conditionHash,
+    amount: amount.toString(),
+  });
+  const transaction = (name: string): Hex => {
+    const hash = state.transactions[name];
+    if (hash === undefined)
+      throw new Error(`OPERATOR_STATE_MISSING_TRANSACTION:${name}`);
+    return hash;
+  };
+  const completionDeadline = BigInt(state.completionDeadline);
+  const expiredAt = BigInt(state.expiredAt);
+  const github = createGitHubPullRequestClient({
+    ...(process.env.GITHUB_TOKEN === undefined ||
+    process.env.GITHUB_TOKEN.trim() === ""
+      ? {}
+      : { token: process.env.GITHUB_TOKEN }),
+  });
+  const observeCondition = async () => {
+    const block = await publicClient.getBlock({ blockTag: "latest" });
+    return verifyGitHubPrMerged({
+      condition,
+      completionDeadline,
+      observedAt: block.timestamp,
+      client: github,
+    });
+  };
   const journal = await FileDeploymentJournal.open(journalPath);
   const send = async (
     step: string,
+    financialStep: ControlledFinancialStep,
+    remainingSteps: readonly ControlledFinancialStep[],
+    applicationReserveBaseUnits: bigint,
     account: PrivateKeyAccount,
     to: Address,
     data: Hex,
@@ -244,6 +360,38 @@ async function main(): Promise<void> {
     const existing = await journal.load(step);
     if (existing?.state === "CONFIRMED") return existing;
     await verifyDeploymentIntegrity(rpcUrl, manifest, readTimeoutMs);
+    const affordabilityBlock = await publicClient.getBlock({
+      blockTag: "latest",
+    });
+    const [senderBalance, observedGasPrice] = await Promise.all([
+      publicClient.getBalance({ address: account.address }),
+      publicClient.getGasPrice(),
+    ]);
+    const affordability = assertRemainingRunAffordability({
+      senderBalance,
+      observedGasPrice,
+      steps: [financialStep, ...remainingSteps],
+      applicationReserveBaseUnits,
+    });
+    state = {
+      ...state,
+      affordabilityChecks: [
+        ...state.affordabilityChecks,
+        {
+          step,
+          sender: account.address,
+          blockNumber: affordabilityBlock.number.toString(),
+          senderBalance: affordability.senderBalance.toString(),
+          observedGasPrice: affordability.observedGasPrice.toString(),
+          planningGasPrice: affordability.planningGasPrice.toString(),
+          gasRequirement: affordability.gasRequirement.toString(),
+          applicationReserveBaseUnits:
+            affordability.applicationReserveBaseUnits.toString(),
+          totalRequirement: affordability.totalRequirement.toString(),
+        },
+      ],
+    };
+    await stateStore.save(state);
     if (existing === undefined || existing.state === "PREPARED")
       await publicClient.call({ account: account.address, to, data });
     const result = await executeDeploymentTransaction({
@@ -295,150 +443,266 @@ async function main(): Promise<void> {
       );
     return result;
   };
-  const balance = (owner: Address) =>
-    publicClient.readContract({
-      address: manifest.usdc.address,
-      abi: usdcArtifact.abi,
-      functionName: "balanceOf",
-      args: [owner],
-    }) as Promise<bigint>;
-  let state: OperatorState;
-  try {
-    state = JSON.parse(await readFile(statePath, "utf8")) as OperatorState;
-  } catch (error) {
-    if (!(error instanceof Error) || !/ENOENT/.test(error.message)) throw error;
-    const [balances, initialBlock] = await Promise.all([
-      Promise.all([
-        balance(clientAccount.address),
-        balance(providerAccount.address),
-        balance(manifest.erc8183.proxy),
-        balance(manifest.erc8183.treasury),
-        balance(manifest.pactEvaluator.address),
-        publicClient.getBalance({ address: relayAccount.address }),
-      ]),
-      publicClient.getBlock(),
-    ]);
-    const seed = keccak256(
-      stringToHex(
-        `${manifest.chainId}:${manifest.pactEvaluator.address}:${Date.now()}`,
-      ),
-    );
-    const window = controlledE2EWindow(
-      manifest.network,
-      initialBlock.timestamp,
-    );
-    state = {
-      schemaVersion: 1,
-      manifestIdentity,
-      pactId: uuidFromHash(seed),
-      clientBefore: balances[0].toString(),
-      providerBefore: balances[1].toString(),
-      escrowBefore: balances[2].toString(),
-      treasuryBefore: balances[3].toString(),
-      evaluatorBefore: balances[4].toString(),
-      relayGasBefore: balances[5].toString(),
-      completionDeadline: window.completionDeadline.toString(),
-      expiredAt: window.expiredAt.toString(),
-    };
-    await mkdir(dirname(statePath), { recursive: true });
-    await writeFile(statePath, `${JSON.stringify(state, null, 2)}\n`, {
-      flag: "wx",
-      mode: 0o600,
-    });
-  }
-  if (state.schemaVersion !== 1 || state.manifestIdentity !== manifestIdentity)
-    throw new Error(
-      "operator state belongs to a different deployment manifest",
-    );
-
-  const condition = normalizeGithubPrMergedCondition({
-    provider: "github",
-    repository: required("PACT_E2E_GITHUB_REPOSITORY"),
-    pullRequest: Number(required("PACT_E2E_GITHUB_PULL_REQUEST")),
-    baseBranch: required("PACT_E2E_GITHUB_BASE_BRANCH"),
-    event: "PR_MERGED",
-  });
-  const conditionHash = hashGithubPrMergedCondition(condition);
-  const completionDeadline = BigInt(state.completionDeadline);
-  const expiredAt = BigInt(state.expiredAt);
-  const create = await send(
-    "e2e-create-job",
-    clientAccount,
-    manifest.erc8183.proxy,
-    encodeFunctionData({
-      abi: erc8183.abi,
-      functionName: "createJob",
-      args: [
-        providerAccount.address,
+  if (action === "prepare") {
+    if (
+      state.stage === "DEPLOYED" &&
+      state.initialConditionResult === undefined
+    ) {
+      const initial = await observeCondition();
+      if (
+        initial.status !== "NOT_SATISFIED" ||
+        initial.reason !== "PULL_REQUEST_NOT_MERGED" ||
+        !initial.retryable
+      )
+        throw new Error(`INITIAL_CONDITION_NOT_OPEN:${initial.status}`);
+      state = { ...state, initialConditionResult: "NOT_SATISFIED_RETRYABLE" };
+      await stateStore.save(state);
+    }
+    if (state.stage === "DEPLOYED") {
+      const create = await send(
+        "e2e-create-job",
+        "e2e-create-job",
+        ["e2e-bind-condition", "e2e-approve-usdc", "e2e-fund"],
+        amount,
+        clientAccount,
+        manifest.erc8183.proxy,
+        encodeFunctionData({
+          abi: erc8183.abi,
+          functionName: "createJob",
+          args: [
+            providerAccount.address,
+            manifest.pactEvaluator.address,
+            expiredAt,
+            "Pact controlled PR_MERGED settlement",
+            ZERO_ADDRESS,
+            0n,
+          ],
+        }),
+      );
+      const createReceipt = await publicClient.getTransactionReceipt({
+        hash: create.transactionHash,
+      });
+      const created = parseEventLogs({
+        abi: [jobCreatedEvent],
+        logs: createReceipt.logs,
+        eventName: "JobCreated",
+      });
+      if (created.length !== 1 || created[0] === undefined)
+        throw new Error("canonical JobCreated event missing");
+      const jobId = created[0].args.jobId;
+      const jobKey = hashPactJobIdentity(
+        normalizePactJobIdentity({
+          chainId: BigInt(manifest.chainId),
+          commerceContract: manifest.erc8183.proxy,
+          jobId,
+        }),
+      );
+      state = advanceControlledOperatorState(state, "JOB_CREATED", {
+        jobId: jobId.toString(),
+        jobKey,
+        transactions: {
+          ...state.transactions,
+          createJob: create.transactionHash,
+        },
+      });
+      await stateStore.save(state);
+    }
+    const jobId = BigInt(state.jobId!);
+    if (state.stage === "JOB_CREATED") {
+      const bind = await send(
+        "e2e-bind-condition",
+        "e2e-bind-condition",
+        ["e2e-approve-usdc", "e2e-fund"],
+        amount,
+        clientAccount,
         manifest.pactEvaluator.address,
-        expiredAt,
-        "Pact controlled PR_MERGED settlement",
-        ZERO_ADDRESS,
+        encodeFunctionData({
+          abi: evaluatorArtifact.abi,
+          functionName: "bindCondition",
+          args: [
+            jobId,
+            conditionHash,
+            completionDeadline,
+            verifierAccount.address,
+          ],
+        }),
+      );
+      state = advanceControlledOperatorState(state, "CONDITION_BOUND", {
+        transactions: {
+          ...state.transactions,
+          bindCondition: bind.transactionHash,
+        },
+      });
+      await stateStore.save(state);
+    }
+    if (state.stage === "CONDITION_BOUND") {
+      const setBudget = await send(
+        "e2e-set-budget",
+        "e2e-set-budget",
+        ["e2e-submit"],
         0n,
-      ],
-    }),
-  );
-  const createReceipt = await publicClient.getTransactionReceipt({
-    hash: create.transactionHash,
+        providerAccount,
+        manifest.erc8183.proxy,
+        encodeFunctionData({
+          abi: erc8183.abi,
+          functionName: "setBudget",
+          args: [jobId, manifest.usdc.address, amount, "0x"],
+        }),
+      );
+      const approve = await send(
+        "e2e-approve-usdc",
+        "e2e-approve-usdc",
+        ["e2e-fund"],
+        amount,
+        clientAccount,
+        manifest.usdc.address,
+        encodeFunctionData({
+          abi: usdcArtifact.abi,
+          functionName: "approve",
+          args: [manifest.erc8183.proxy, amount],
+        }),
+      );
+      const fund = await send(
+        "e2e-fund",
+        "e2e-fund",
+        [],
+        amount,
+        clientAccount,
+        manifest.erc8183.proxy,
+        encodeFunctionData({
+          abi: erc8183.abi,
+          functionName: "fund",
+          args: [jobId, manifest.usdc.address, amount, "0x"],
+        }),
+      );
+      state = advanceControlledOperatorState(state, "FUNDED", {
+        transactions: {
+          ...state.transactions,
+          setBudget: setBudget.transactionHash,
+          approveUsdc: approve.transactionHash,
+          fund: fund.transactionHash,
+        },
+      });
+      await stateStore.save(state);
+    }
+    if (state.stage === "FUNDED") {
+      const submit = await send(
+        "e2e-submit",
+        "e2e-submit",
+        [],
+        0n,
+        providerAccount,
+        manifest.erc8183.proxy,
+        encodeFunctionData({
+          abi: erc8183.abi,
+          functionName: "submit",
+          args: [jobId, conditionHash, "0x"],
+        }),
+      );
+      state = advanceControlledOperatorState(state, "SUBMITTED", {
+        transactions: {
+          ...state.transactions,
+          submit: submit.transactionHash,
+        },
+      });
+      await stateStore.save(state);
+    }
+    if (state.stage === "SUBMITTED") {
+      const snapshot = await createArcReadClient({
+        rpcUrl,
+        timeoutMs: readTimeoutMs,
+      }).readSnapshot({
+        pactEvaluator: manifest.pactEvaluator.address,
+        commerceContract: manifest.erc8183.proxy,
+        jobId,
+      });
+      if (
+        snapshot.jobStatus !== 2 ||
+        !snapshot.bindingExists ||
+        snapshot.bindingAccepted ||
+        snapshot.jobKey !== state.jobKey ||
+        snapshot.bindingConditionHash !== conditionHash
+      )
+        throw new Error("SUBMITTED_CHECKPOINT_CANONICAL_STATE_MISMATCH");
+      state = advanceControlledOperatorState(state, "AWAITING_CONDITION");
+      await stateStore.save(state);
+    }
+    if (state.stage !== "AWAITING_CONDITION")
+      throw new Error(`PREPARE_STAGE_INVALID:${state.stage}`);
+    process.stdout.write(
+      `${JSON.stringify({ status: "AWAITING_CONDITION", stage: state.stage, jobId: state.jobId, conditionHash }, null, 2)}\n`,
+    );
+    return;
+  }
+
+  if (
+    state.stage === "DEPLOYED" ||
+    state.stage === "JOB_CREATED" ||
+    state.stage === "CONDITION_BOUND" ||
+    state.stage === "FUNDED" ||
+    state.stage === "SUBMITTED"
+  )
+    throw new Error("OPERATOR_PREPARE_INCOMPLETE");
+  const jobId = BigInt(state.jobId!);
+  const canonicalBeforeResume = await createArcReadClient({
+    rpcUrl,
+    timeoutMs: readTimeoutMs,
+  }).readSnapshot({
+    pactEvaluator: manifest.pactEvaluator.address,
+    commerceContract: manifest.erc8183.proxy,
+    jobId,
   });
-  const created = parseEventLogs({
-    abi: [jobCreatedEvent],
-    logs: createReceipt.logs,
-    eventName: "JobCreated",
-  });
-  if (created.length !== 1 || created[0] === undefined)
-    throw new Error("canonical JobCreated event missing");
-  const jobId = created[0].args.jobId;
-  const bind = await send(
-    "e2e-bind-condition",
-    clientAccount,
-    manifest.pactEvaluator.address,
-    encodeFunctionData({
-      abi: evaluatorArtifact.abi,
-      functionName: "bindCondition",
-      args: [jobId, conditionHash, completionDeadline, verifierAccount.address],
-    }),
-  );
-  const setBudget = await send(
-    "e2e-set-budget",
-    providerAccount,
-    manifest.erc8183.proxy,
-    encodeFunctionData({
-      abi: erc8183.abi,
-      functionName: "setBudget",
-      args: [jobId, manifest.usdc.address, amount, "0x"],
-    }),
-  );
-  const approve = await send(
-    "e2e-approve-usdc",
-    clientAccount,
-    manifest.usdc.address,
-    encodeFunctionData({
-      abi: usdcArtifact.abi,
-      functionName: "approve",
-      args: [manifest.erc8183.proxy, amount],
-    }),
-  );
-  const fund = await send(
-    "e2e-fund",
-    clientAccount,
-    manifest.erc8183.proxy,
-    encodeFunctionData({
-      abi: erc8183.abi,
-      functionName: "fund",
-      args: [jobId, manifest.usdc.address, amount, "0x"],
-    }),
-  );
-  const submit = await send(
-    "e2e-submit",
-    providerAccount,
-    manifest.erc8183.proxy,
-    encodeFunctionData({
-      abi: erc8183.abi,
-      functionName: "submit",
-      args: [jobId, conditionHash, "0x"],
-    }),
-  );
+  if (
+    canonicalBeforeResume.chainId !== BigInt(manifest.chainId) ||
+    canonicalBeforeResume.commerceContract !== manifest.erc8183.proxy ||
+    canonicalBeforeResume.pactEvaluator !== manifest.pactEvaluator.address ||
+    canonicalBeforeResume.jobKey !== state.jobKey ||
+    canonicalBeforeResume.bindingConditionHash !== conditionHash ||
+    canonicalBeforeResume.bindingCompletionDeadline !== completionDeadline ||
+    canonicalBeforeResume.bindingVerifier !== verifierAccount.address ||
+    canonicalBeforeResume.jobClient !== clientAccount.address ||
+    canonicalBeforeResume.jobProvider !== providerAccount.address ||
+    canonicalBeforeResume.jobEvaluator !== manifest.pactEvaluator.address ||
+    canonicalBeforeResume.jobExpiredAt !== expiredAt ||
+    !canonicalBeforeResume.bindingExists
+  )
+    throw new Error("OPERATOR_RESUME_CANONICAL_STATE_MISMATCH");
+  if (state.stage === "SETTLED") {
+    if (
+      canonicalBeforeResume.jobStatus !== 3 ||
+      !canonicalBeforeResume.bindingAccepted
+    )
+      throw new Error("OPERATOR_SETTLED_STATE_MISMATCH");
+  } else if (
+    canonicalBeforeResume.jobStatus !== 2 ||
+    canonicalBeforeResume.bindingAccepted ||
+    canonicalBeforeResume.verifierRevoked ||
+    canonicalBeforeResume.blockTimestamp >= expiredAt
+  ) {
+    throw new Error("OPERATOR_RESUME_NOT_SUBMITTED");
+  }
+  if (state.stage === "AWAITING_CONDITION") {
+    const verification = await observeCondition();
+    if (verification.status === "NOT_SATISFIED") {
+      state = {
+        ...state,
+        falseResumeCount: (state.falseResumeCount ?? 0) + 1,
+      };
+      await stateStore.save(state);
+      process.stdout.write(
+        `${JSON.stringify({ status: "AWAITING_CONDITION", stage: state.stage, reason: verification.reason, databaseWrites: 0, financialWrites: 0 }, null, 2)}\n`,
+      );
+      return;
+    }
+    if (verification.status !== "SATISFIED")
+      throw new Error(`CONDITION_INDETERMINATE:${verification.reason}`);
+    state = advanceControlledOperatorState(state, "CONDITION_SATISFIED");
+    await stateStore.save(state);
+  } else if (state.stage !== "SETTLED") {
+    const verification = await observeCondition();
+    if (verification.status !== "SATISFIED")
+      throw new Error(`OPERATOR_RESUME_CONDITION_DRIFT:${verification.status}`);
+  }
   const jobBeforeCompletion = (await publicClient.readContract({
     address: manifest.erc8183.proxy,
     abi: erc8183.abi,
@@ -449,13 +713,7 @@ async function main(): Promise<void> {
   const database = createPactDatabaseFromEnv(process.env);
   try {
     const pactRepository = new PostgresPactRepository(database);
-    const jobKey = hashPactJobIdentity(
-      normalizePactJobIdentity({
-        chainId: BigInt(manifest.chainId),
-        commerceContract: manifest.erc8183.proxy,
-        jobId,
-      }),
-    );
+    const jobKey = state.jobKey!;
     const pact: PactRecord = {
       id: state.pactId,
       chainId: BigInt(manifest.chainId),
@@ -467,21 +725,26 @@ async function main(): Promise<void> {
       conditionHash,
       completionDeadline,
     };
-    if ((await pactRepository.getPact(state.pactId)) === undefined)
-      await pactRepository.createPact(pact);
-    const operation = await pactRepository.enqueueManualOperation(
-      state.pactId,
-      controlledE2EOperationTrigger({
-        jobKey,
-        runtimeCommit: gitCommit,
-        scope: operationScope,
-      }),
-    );
-    const github = createGitHubPullRequestClient({
-      ...(process.env.GITHUB_TOKEN === undefined
-        ? {}
-        : { token: process.env.GITHUB_TOKEN }),
-    });
+    let operationId = state.operationId;
+    if (state.stage === "CONDITION_SATISFIED") {
+      if ((await pactRepository.getPact(state.pactId)) === undefined)
+        await pactRepository.createPact(pact);
+      const operation = await pactRepository.enqueueManualOperation(
+        state.pactId,
+        controlledE2EOperationTrigger({
+          jobKey,
+          runtimeCommit: gitCommit,
+          scope: operationScope,
+        }),
+      );
+      operationId = operation.id;
+      state = advanceControlledOperatorState(state, "PHASE4A_ENQUEUED", {
+        operationId,
+      });
+      await stateStore.save(state);
+    }
+    if (operationId === undefined)
+      throw new Error("OPERATOR_STATE_MISSING_OPERATION");
     const orchestrator = createPhase4AOrchestrator({
       repository: pactRepository,
       github,
@@ -491,11 +754,17 @@ async function main(): Promise<void> {
       configuredPactEvaluator: manifest.pactEvaluator.address,
       configuredCommerceContract: manifest.erc8183.proxy,
     });
-    const prepared = await orchestrator.processOperation(operation.id);
-    if (prepared.state !== "READY_TO_RELAY")
-      throw new Error(
-        `backend did not reach READY_TO_RELAY: ${prepared.state}:${prepared.code ?? ""}`,
-      );
+    if (state.stage === "PHASE4A_ENQUEUED") {
+      const prepared = await orchestrator.processOperation(operationId);
+      if (prepared.state !== "READY_TO_RELAY")
+        throw new Error(
+          `backend did not reach READY_TO_RELAY: ${prepared.state}:${prepared.code ?? ""}`,
+        );
+      state = advanceControlledOperatorState(state, "READY_TO_RELAY");
+      await stateStore.save(state);
+    }
+    if (state.stage !== "READY_TO_RELAY" && state.stage !== "SETTLED")
+      throw new Error(`RESUME_STAGE_INVALID:${state.stage}`);
     await verifyDeploymentIntegrity(rpcUrl, manifest, readTimeoutMs);
     const relayRepository = new PostgresRelayRepository(database);
     const relayChain = createRelayChainClient({ rpcUrl, readTimeoutMs });
@@ -511,7 +780,52 @@ async function main(): Promise<void> {
       configuredPactEvaluator: manifest.pactEvaluator.address,
       configuredCommerceContract: manifest.erc8183.proxy,
     });
-    const processed = await relayService.process();
+    const previouslySettled = await (async () => {
+      const settledIntents = await relayRepository.listIntents(["SETTLED"], 25);
+      for (const candidate of settledIntents) {
+        const artifact = await relayRepository.findArtifactByIntent(
+          candidate.id,
+        );
+        if (artifact?.operationId === operationId) return candidate;
+      }
+      return undefined;
+    })();
+    if (previouslySettled === undefined) {
+      const [relayBalance, gasPrice] = await Promise.all([
+        publicClient.getBalance({ address: relayAccount.address }),
+        publicClient.getGasPrice(),
+      ]);
+      const affordability = assertRemainingRunAffordability({
+        senderBalance: relayBalance,
+        observedGasPrice: gasPrice,
+        steps: ["e2e-settle"],
+      });
+      const affordabilityBlock = await publicClient.getBlock({
+        blockTag: "latest",
+      });
+      state = {
+        ...state,
+        affordabilityChecks: [
+          ...state.affordabilityChecks,
+          {
+            step: "e2e-settle",
+            sender: relayAccount.address,
+            blockNumber: affordabilityBlock.number.toString(),
+            senderBalance: affordability.senderBalance.toString(),
+            observedGasPrice: affordability.observedGasPrice.toString(),
+            planningGasPrice: affordability.planningGasPrice.toString(),
+            gasRequirement: affordability.gasRequirement.toString(),
+            applicationReserveBaseUnits: "0",
+            totalRequirement: affordability.totalRequirement.toString(),
+          },
+        ],
+      };
+      await stateStore.save(state);
+    }
+    const processed =
+      previouslySettled === undefined
+        ? await relayService.process()
+        : { state: "IDLE" as const };
     if (
       processed.state !== "SUBMITTED" &&
       processed.state !== "BROADCAST_UNKNOWN" &&
@@ -520,7 +834,8 @@ async function main(): Promise<void> {
       throw new Error(
         `relay did not submit or resume: ${processed.state}:${processed.code ?? ""}`,
       );
-    const reconciled = await relayService.reconcile();
+    const reconciled =
+      previouslySettled === undefined ? await relayService.reconcile() : [];
     let settlementIntent = await (async () => {
       const settledResult = reconciled.find(
         (candidate) => candidate.state === "SETTLED",
@@ -532,7 +847,7 @@ async function main(): Promise<void> {
         const artifact = await relayRepository.findArtifactByIntent(
           candidate.id,
         );
-        if (artifact?.operationId === operation.id) return candidate;
+        if (artifact?.operationId === operationId) return candidate;
       }
       return undefined;
     })();
@@ -581,7 +896,7 @@ async function main(): Promise<void> {
       readonly settledAmount: bigint;
     };
     const fundReceipt = await publicClient.getTransactionReceipt({
-      hash: fund.transactionHash,
+      hash: transaction("fund"),
     });
     const canonicalTransfers = (logs: typeof settlementReceipt.logs) =>
       parseEventLogs({
@@ -675,14 +990,14 @@ async function main(): Promise<void> {
         manifest.deploymentTransactions.evaluator,
       ]),
       client: await gasGroup([
-        create.transactionHash,
-        bind.transactionHash,
-        approve.transactionHash,
-        fund.transactionHash,
+        transaction("createJob"),
+        transaction("bindCondition"),
+        transaction("approveUsdc"),
+        transaction("fund"),
       ]),
       provider: await gasGroup([
-        setBudget.transactionHash,
-        submit.transactionHash,
+        transaction("setBudget"),
+        transaction("submit"),
       ]),
       relay: await gasGroup([settlementTransactionHash]),
     };
@@ -712,6 +1027,9 @@ async function main(): Promise<void> {
         afterBlock: afterBlock.toString(),
       };
     };
+    const createReceipt = await publicClient.getTransactionReceipt({
+      hash: transaction("createJob"),
+    });
     const e2eBeforeBlock = createReceipt.blockNumber - 1n;
     const nativeBalanceDiagnostics = {
       deployer: await nativeBalanceWindow(
@@ -767,6 +1085,12 @@ async function main(): Promise<void> {
     settlementIntent = await relayRepository.getIntent(settlementIntent.id);
     if (settlementIntent?.state !== "SETTLED")
       throw new Error("durable relay intent is not SETTLED");
+    if (state.stage === "READY_TO_RELAY") {
+      state = advanceControlledOperatorState(state, "SETTLED", {
+        settlementTransactionHash,
+      });
+      await stateStore.save(state);
+    }
     const result = {
       jobId: jobId.toString(),
       conditionHash,
@@ -853,12 +1177,128 @@ async function main(): Promise<void> {
         mode: 0o644,
       });
       await rename(temporary, manifestPath);
+    } else {
+      if (finalJob.settledAmount !== 0n)
+        throw new Error("MAINNET_GATE_PREEXISTING_CLAIM_FORBIDDEN");
+      const finalSnapshot = await createArcReadClient({
+        rpcUrl,
+        timeoutMs: readTimeoutMs,
+      }).readSnapshot({
+        pactEvaluator: manifest.pactEvaluator.address,
+        commerceContract: manifest.erc8183.proxy,
+        jobId,
+      });
+      if (!finalSnapshot.bindingAccepted || finalSnapshot.jobStatus !== 3)
+        throw new Error("MAINNET_GATE_FINAL_STATE_INVALID");
+      if (
+        settlementReceipt.blockHash === null ||
+        settlementIntent.eventBlockNumber === null ||
+        settlementIntent.eventBlockHash === null ||
+        settlementIntent.eventLogIndex === null ||
+        completionEvents[0] === undefined ||
+        completionEvents[0].blockHash === null ||
+        completionEvents[0].logIndex === null
+      )
+        throw new Error("MAINNET_GATE_EVENT_COORDINATES_MISSING");
+      const gateWithoutHash = {
+        schemaVersion: 1 as const,
+        status: "PASS" as const,
+        chainId: "5042" as const,
+        mainnetReleaseCommit: gitCommit,
+        erc8183SourceCommit: manifest.erc8183.sourceCommit,
+        completedAt: new Date().toISOString(),
+        contracts: {
+          implementation: manifest.erc8183.implementation,
+          proxy: manifest.erc8183.proxy,
+          pactEvaluator: manifest.pactEvaluator.address,
+        },
+        runtimeCodeHashes: {
+          erc8183Implementation: manifest.erc8183.implementationCodeHash,
+          erc8183Proxy: manifest.erc8183.proxyCodeHash,
+          pactEvaluator: manifest.pactEvaluator.codeHash,
+        },
+        roles: {
+          operator: manifest.deployer,
+          treasury: manifest.erc8183.treasury,
+          provider: providerAccount.address,
+          verifier: verifierAccount.address,
+          relay: relayAccount.address,
+        },
+        deploymentTransactions: manifest.deploymentTransactions,
+        jobId: jobId.toString(),
+        github: {
+          repository: condition.repository,
+          pullRequest: condition.pullRequest,
+          baseBranch: condition.baseBranch,
+          mergeCommitSha: readyArtifact.evidence.mergeCommitSha,
+          mergedAt: new Date(
+            Number(readyArtifact.evidence.mergedAt) * 1_000,
+          ).toISOString(),
+        },
+        conditionHash,
+        evidenceHash: readyArtifact.attestation.evidenceHash,
+        attestationDigest: readyArtifact.attestation.digest,
+        settlement: {
+          transactionHash: settlementTransactionHash,
+          receiptBlockNumber: settlementReceipt.blockNumber.toString(),
+          receiptBlockHash: settlementReceipt.blockHash,
+          pactCompletionAccepted: {
+            blockNumber: settlementIntent.eventBlockNumber.toString(),
+            blockHash: settlementIntent.eventBlockHash,
+            logIndex: settlementIntent.eventLogIndex,
+          },
+          jobCompleted: {
+            blockNumber: completionEvents[0].blockNumber.toString(),
+            blockHash: completionEvents[0].blockHash,
+            logIndex: completionEvents[0].logIndex,
+          },
+        },
+        broadcastAttemptCount: settlementIntent.broadcastAttemptCount as 1,
+        economics: {
+          budget: amount.toString(),
+          grossFunding: fundingTransferToEscrow.toString(),
+          grossProviderPayout: providerPayoutFromEscrow.toString(),
+          treasuryApplicationPayout: "0" as const,
+          evaluatorApplicationPayout: "0" as const,
+          settledAmount: "0" as const,
+          completionReason: readyArtifact.attestation.evidenceHash,
+        },
+        finalState: {
+          jobStatus: 3 as const,
+          bindingAccepted: true as const,
+        },
+      };
+      if (settlementIntent.broadcastAttemptCount !== 1)
+        throw new Error("MAINNET_GATE_BROADCAST_COUNT_INVALID");
+      const gated = assertDeploymentManifest({
+        ...manifest,
+        mainnetGate: {
+          ...gateWithoutHash,
+          resultHash: mainnetGateResultHash(gateWithoutHash),
+        },
+      });
+      const temporary = `${manifestPath}.tmp`;
+      await writeFile(temporary, `${JSON.stringify(gated, null, 2)}\n`, {
+        mode: 0o644,
+      });
+      await rename(temporary, manifestPath);
     }
     process.stdout.write(
       `${JSON.stringify({ status: "PASS", ...result, resultHash }, null, 2)}\n`,
     );
   } finally {
     await database.close();
+  }
+}
+
+async function main(): Promise<void> {
+  const statePath = resolve(required("PACT_E2E_STATE_PATH"));
+  const releaseOperatorLock =
+    await FileControlledOperatorState.acquireExclusive(statePath);
+  try {
+    await runControlledOperator();
+  } finally {
+    await releaseOperatorLock();
   }
 }
 

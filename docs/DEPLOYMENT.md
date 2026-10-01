@@ -49,7 +49,7 @@ disposable PostgreSQL database:
 
 ```bash
 PACT_PHASE5_LOCAL_E2E=1 DATABASE_URL=postgresql://.../pact_phase5_local_test \
-  npm run test:phase5-local
+  npm run test:phase5-staged-local
 ```
 
 This gate deploys the real pinned ERC-8183 implementation/proxy and a
@@ -97,34 +97,50 @@ verification as verified.
 
 ## Controlled Testnet E2E gate
 
-Use a real GitHub repository and merged pull request. With separate
-client/provider/relay identities:
+Use a real public GitHub repository and an initially open pull request. With
+separate client/provider/relay identities, first prepare the job:
 
 After configuring the operator-only variables in a local ignored environment
 file, run:
 
 ```bash
-PACT_E2E_CONFIRM='RUN arc-testnet 5042002' npm run operator:e2e
+PACT_E2E_ACTION=prepare \
+PACT_E2E_CONFIRM='RUN arc-testnet 5042002' \
+npm run operator:e2e
 ```
 
 `PACT_E2E_OPERATION_SCOPE` is a required, non-secret semantic idempotency scope.
-Keep it unchanged when reconciling or restarting one phase. Use a new scope only
-for a genuinely new retryable observation, such as `github-pr-open` before merge
-and `github-merge:<commit-sha>` after merge. The operator hashes the job
-identity, runtime commit, and scope into the durable manual trigger key so a
-later retry is distinct without weakening deduplication.
+It, the journal, state path, condition, contracts, and identities remain exactly
+unchanged across every retry and resume of one job. The `prepare` action uses
+the production GitHub verifier to prove the open PR is not yet merged without
+opening the database, then creates, binds, funds, submits, persists the external
+`AWAITING_CONDITION` checkpoint, and stops. A resume while the PR remains open
+performs no chain or database write. After an operator merges the PR, continue
+with the same inputs:
+
+```bash
+PACT_E2E_ACTION=resume \
+PACT_E2E_CONFIRM='RUN arc-testnet 5042002' \
+npm run operator:e2e
+```
+
+Resume revalidates the external checkpoint against canonical Arc and GitHub
+state before it creates the single durable Phase 4A operation. Repeated and
+concurrent invocations reuse durable operation/relay identities and never change
+operation scope to evade uniqueness.
 
 `operator:e2e` validates the manifest and live bytecode/configuration before
-writes, uses a secret external recovery journal for each exact signed
-transaction, simulates each lifecycle call immediately before signing, reads
-GitHub through the production client, and settles only through the persisted
-Phase 4A → Phase 4B path. It refuses a verifier/relay collision, non-integer
-amount, Mainnet amount over 0.10 USDC, release drift, or a state/journal path
-inside the repository. On a complete Testnet pass it atomically adds the
-version-bound `testnetGate` record to the existing manifest. The root
-`gitCommit` (and gate `deploymentGitCommit`) identifies the source that produced
-the deployed contracts; `e2eRuntimeCommit` separately identifies the corrected
-backend/verifier code that ran the rehearsal.
+writes, uses an exclusive non-secret external checkpoint and a secret recovery
+journal for each exact signed transaction, simulates each lifecycle call
+immediately before signing, reads GitHub through the production client, and
+settles only through the persisted Phase 4A → Phase 4B path. It refuses a
+verifier/relay collision, non-integer amount, Mainnet amount over 0.10 USDC,
+release drift, or a state/journal path inside the repository. On a complete
+Testnet pass it atomically adds the version-bound `testnetGate` record to the
+existing manifest. The root `gitCommit` (and gate `deploymentGitCommit`)
+identifies the source that produced the deployed contracts; `e2eRuntimeCommit`
+separately identifies the corrected backend/verifier code that ran the
+rehearsal.
 
 Arc read-only RPC operations use a bounded 10-second production default and a
 15-second controlled Testnet rehearsal bound, with a hard 30-second maximum and
@@ -132,19 +148,20 @@ zero hidden retries. Relay broadcasting retains its independent five-second
 single-dispatch transport bound; a timeout after dispatch remains
 `BROADCAST_UNKNOWN` and is reconciled rather than resent.
 
-1. Create the ERC-8183 job with PactEvaluator as evaluator and a finite expiry.
+1. Prove the public PR is open and unmerged without creating a Phase 4A record.
+2. Create the ERC-8183 job with PactEvaluator as evaluator and a finite expiry.
    The controlled Testnet harness uses a two-hour completion deadline and a
    further four-hour settlement margin (six hours total, below 24 hours).
-2. Bind the canonical `PR_MERGED` condition while the job is `Open`.
-3. Provider sets a small six-decimal USDC budget; client explicitly approves and
+3. Bind the canonical `PR_MERGED` condition while the job is `Open`.
+4. Provider sets a small six-decimal USDC budget; client explicitly approves and
    funds that exact token and amount.
-4. Provider submits; Pact re-reads GitHub authoritative API state and canonical
-   chain state.
-5. The verifier signs only a positive, current result. Persist the evidence and
-   exact signed attestation before relay.
-6. Relay with the existing durable Phase 4B state machine; reconcile receipt and
+5. Provider submits and the operator stops at `AWAITING_CONDITION`.
+6. Resume re-reads authoritative GitHub and canonical chain state. The verifier
+   signs only a positive, current result. Persist the evidence and exact signed
+   attestation before relay.
+7. Relay with the existing durable Phase 4B state machine; reconcile receipt and
    `PactCompletionAccepted`/ERC-8183 completion events.
-7. Prove the gross canonical USDC funding and provider payout transfers equal
+8. Prove the gross canonical USDC funding and provider payout transfers equal
    the budget, the pinned job state is completed, escrow returns to baseline,
    and treasury/evaluator application transfers are zero. Record transaction gas
    separately in Arc's 18-decimal native accounting; six-decimal `balanceOf`
@@ -157,17 +174,16 @@ object. A failed, unavailable, or incomplete check leaves the phase blocked.
 ## Mainnet gate
 
 Mainnet is not a retry of Testnet. It requires explicit Tech Lead approval and a
-valid Testnet PASS manifest. The release gate preserves the historical
-deployment and E2E runtime commits, requires the successful E2E runtime and
-evidence checkpoint to be ancestors of the candidate, requires a clean worktree,
-and rejects changes beneath a versioned Mainnet-critical runtime scope. The only
-exceptions are exact reviewed provenance/control-plane paths;
-evidence-checkpoint files and the mixed manifest validator/operator files are
-additionally pinned by tree or blob identity. This avoids self-referential HEAD
-metadata while failing closed on runtime drift. The ERC-8183 source and
-PactEvaluator creation-artifact identities must still match exactly. The
-controlled Mainnet E2E amount has a non-configurable ceiling of `100000` base
-units (0.10 USDC); lowering it is allowed, raising it requires a code review.
+valid Testnet PASS manifest. The release gate derives the active runtime root
+from the freshly certified `testnetGate.e2eRuntimeCommit`, requires that runtime
+and the historical evidence checkpoint to be ancestors of the candidate,
+requires a clean worktree, and permits only reviewed post-certification
+provenance/control-plane changes. The staged operator and affordability policy
+must remain byte-for-byte identical to the certified runtime; the manifest
+validator is independently blob-pinned. The ERC-8183 source and PactEvaluator
+creation-artifact identities must still match exactly. The controlled Mainnet
+E2E amount has a non-configurable ceiling of `100000` base units (0.10 USDC);
+lowering it is allowed, raising it requires a code review.
 
 Both Mainnet commands also require a separate commit-bound acknowledgement:
 `PACT_MAINNET_DEPLOY_APPROVAL='APPROVED <full-git-commit>'` for deployment and

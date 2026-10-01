@@ -30,6 +30,10 @@ import {
 import { verifyDeploymentIntegrity } from "./integrity.js";
 import { FileDeploymentJournal } from "./file-journal.js";
 import {
+  assertRemainingRunAffordability,
+  type ControlledFinancialStep,
+} from "./safety.js";
+import {
   executeDeploymentTransaction,
   type DeploymentTransactionRecord,
 } from "./transaction.js";
@@ -181,10 +185,24 @@ async function main(): Promise<void> {
   const journal = await FileDeploymentJournal.open(journalPath);
   const transact = async (
     step: string,
+    financialStep: ControlledFinancialStep,
+    remainingSteps: readonly ControlledFinancialStep[],
     data: Hex,
     to?: Address,
   ): Promise<DeploymentTransactionRecord> => {
     const journalStep = `${network}:${gitCommit}:${step}`;
+    const existing = await journal.load(journalStep);
+    if (existing?.state === "CONFIRMED") return existing;
+    const [senderBalance, observedGasPrice] = await Promise.all([
+      client.getBalance({ address: account.address }),
+      client.getGasPrice(),
+    ]);
+    assertRemainingRunAffordability({
+      senderBalance,
+      observedGasPrice,
+      steps: [financialStep, ...remainingSteps],
+      applicationReserveBaseUnits: network === "arc-mainnet" ? 100_000n : 0n,
+    });
     const result = await executeDeploymentTransaction({
       step: journalStep,
       journal,
@@ -259,6 +277,16 @@ async function main(): Promise<void> {
 
   const implementationTx = await transact(
     "erc8183-implementation",
+    "deployment-implementation",
+    [
+      "deployment-proxy",
+      "deployment-allow-usdc",
+      "deployment-evaluator",
+      "e2e-create-job",
+      "e2e-bind-condition",
+      "e2e-approve-usdc",
+      "e2e-fund",
+    ],
     encodeDeployData({ abi: erc8183.abi, bytecode: erc8183.bytecode.object }),
   );
   const implementation = await deployedAddress(
@@ -272,6 +300,15 @@ async function main(): Promise<void> {
   });
   const proxyTx = await transact(
     "erc8183-proxy",
+    "deployment-proxy",
+    [
+      "deployment-allow-usdc",
+      "deployment-evaluator",
+      "e2e-create-job",
+      "e2e-bind-condition",
+      "e2e-approve-usdc",
+      "e2e-fund",
+    ],
     encodeDeployData({
       abi: proxyArtifact.abi,
       bytecode: proxyArtifact.bytecode.object,
@@ -281,6 +318,14 @@ async function main(): Promise<void> {
   const proxy = await deployedAddress(proxyTx, "ERC-8183 proxy");
   const allowTx = await transact(
     "allow-arc-usdc",
+    "deployment-allow-usdc",
+    [
+      "deployment-evaluator",
+      "e2e-create-job",
+      "e2e-bind-condition",
+      "e2e-approve-usdc",
+      "e2e-fund",
+    ],
     encodeFunctionData({
       abi: erc8183.abi,
       functionName: "setPaymentTokenAllowed",
@@ -290,6 +335,8 @@ async function main(): Promise<void> {
   );
   const evaluatorTx = await transact(
     "pact-evaluator",
+    "deployment-evaluator",
+    ["e2e-create-job", "e2e-bind-condition", "e2e-approve-usdc", "e2e-fund"],
     encodeDeployData({
       abi: evaluatorArtifact.abi,
       bytecode: evaluatorArtifact.bytecode.object,

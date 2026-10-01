@@ -295,6 +295,18 @@ export class PostgresPactRepository implements PactRepository {
         .onConflictDoNothing()
         .returning();
       if (rows[0] !== undefined) return asOperation(rows[0]);
+      const [existing] = await tx
+        .select()
+        .from(operations)
+        .where(
+          and(
+            eq(operations.pactRecordId, pactRecordId),
+            eq(operations.triggerKind, "MANUAL"),
+            eq(operations.triggerKey, triggerKey),
+          ),
+        )
+        .limit(1);
+      if (existing !== undefined) return asOperation(existing);
       const [active] = await tx
         .select()
         .from(operations)

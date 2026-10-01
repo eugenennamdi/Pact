@@ -5,7 +5,9 @@ import type { DeploymentManifest } from "./manifest.js";
 export const MAINNET_RELEASE_GATE_VERSION = 1 as const;
 export const TESTNET_DEPLOYMENT_GIT_COMMIT =
   "5e9214f996ef48bc465ca2ee6a4f8e30d782a362" as const;
-export const TESTNET_E2E_RUNTIME_COMMIT =
+/** Historical runtime retained only as provenance; the active runtime comes
+ * from the newly certified testnetGate and is checked as a Git ancestor. */
+export const HISTORICAL_TESTNET_E2E_RUNTIME_COMMIT =
   "f8c7c6240f0655e86cdd156bcd4f8792ab672549" as const;
 export const TESTNET_EVIDENCE_CHECKPOINT =
   "52c53e5d641b47666fdf4488142c1eba95500014" as const;
@@ -19,7 +21,7 @@ const MANIFEST_VALIDATOR_PATH =
 // Filled from `git hash-object` after the validator/re-export isolation is
 // complete. Keeping this separate from manifest.ts avoids a self-reference.
 export const APPROVED_MANIFEST_VALIDATOR_BLOB =
-  "d32a26d5c3310755ee87fb2f87e3e0554d9ac523" as const;
+  "86f660e47112654755e943a9d2ded91892e87a5b" as const;
 
 /**
  * Versioned, fail-closed roots for every production input that can affect the
@@ -37,20 +39,16 @@ export const MAINNET_CRITICAL_RUNTIME_ROOTS = Object.freeze([
 
 /** Exact control/evidence exceptions reviewed after the successful Testnet run. */
 export const APPROVED_CONTROL_PATHS = Object.freeze([
-  "packages/orchestrator/src/deployment/manifest.ts",
-  "packages/orchestrator/src/deployment/manifest.test.ts",
   "packages/orchestrator/src/deployment/mainnet-release.ts",
   "packages/orchestrator/src/deployment/mainnet-release.test.ts",
-  "packages/orchestrator/src/deployment/operator.ts",
 ] as const);
 
-/** Evidence-checkpoint files that must remain byte-for-byte unchanged. */
-export const EVIDENCE_LOCKED_PATHS = Object.freeze([
-  ".env.example",
-  "deployments/arc-testnet.json",
-  "deployments/manifest.schema.json",
-  "docs/PHASE5A_ARC_TESTNET_REHEARSAL.md",
+/** Runtime files that must remain byte-for-byte identical to the runtime that
+ * the fresh Testnet gate certifies. */
+export const RUNTIME_LOCKED_PATHS = Object.freeze([
   "packages/orchestrator/src/deployment/operator.ts",
+  "packages/orchestrator/src/deployment/safety.ts",
+  "packages/orchestrator/src/deployment/staged-operator.ts",
 ] as const);
 
 export interface ReleaseGitInspection {
@@ -143,7 +141,7 @@ export function assertMainnetGate(
   if (
     testnet.gitCommit !== TESTNET_DEPLOYMENT_GIT_COMMIT ||
     gate.deploymentGitCommit !== TESTNET_DEPLOYMENT_GIT_COMMIT ||
-    gate.e2eRuntimeCommit !== TESTNET_E2E_RUNTIME_COMMIT
+    !/^[0-9a-f]{40}$/.test(gate.e2eRuntimeCommit)
   )
     throw new Error("MAINNET_BLOCKED_TESTNET_PROVENANCE_DRIFT");
   if (
@@ -157,26 +155,26 @@ export function assertMainnetGate(
   if (inspection.head() !== mainnetGitCommit)
     throw new Error("MAINNET_BLOCKED_RELEASE_NOT_HEAD");
   if (!inspection.isClean()) throw new Error("MAINNET_BLOCKED_DIRTY_WORKTREE");
-  if (!inspection.isAncestor(TESTNET_E2E_RUNTIME_COMMIT, mainnetGitCommit))
+  if (!inspection.isAncestor(gate.e2eRuntimeCommit, mainnetGitCommit))
     throw new Error("MAINNET_BLOCKED_NON_DESCENDANT_RELEASE");
   if (!inspection.isAncestor(TESTNET_EVIDENCE_CHECKPOINT, mainnetGitCommit))
     throw new Error("MAINNET_BLOCKED_EVIDENCE_CHECKPOINT_MISSING");
 
-  let checkpointManifest: unknown;
+  let releaseManifest: unknown;
   try {
-    checkpointManifest = JSON.parse(
-      inspection.fileAt(TESTNET_EVIDENCE_CHECKPOINT, TESTNET_MANIFEST_PATH),
+    releaseManifest = JSON.parse(
+      inspection.fileAt(mainnetGitCommit, TESTNET_MANIFEST_PATH),
     ) as unknown;
   } catch {
     throw new Error("MAINNET_BLOCKED_TESTNET_MANIFEST_INTEGRITY");
   }
-  if (canonical(testnet) !== canonical(checkpointManifest))
+  if (canonical(testnet) !== canonical(releaseManifest))
     throw new Error("MAINNET_BLOCKED_TESTNET_MANIFEST_INTEGRITY");
 
   const approved = new Set<string>(APPROVED_CONTROL_PATHS);
   const unexpected = inspection
     .changedPaths(
-      TESTNET_E2E_RUNTIME_COMMIT,
+      gate.e2eRuntimeCommit,
       mainnetGitCommit,
       MAINNET_CRITICAL_RUNTIME_ROOTS,
     )
@@ -186,15 +184,9 @@ export function assertMainnetGate(
       `MAINNET_BLOCKED_RUNTIME_DRIFT:${unexpected.sort().join(",")}`,
     );
 
-  for (const path of EVIDENCE_LOCKED_PATHS) {
-    if (
-      !inspection.pathEquals(
-        TESTNET_EVIDENCE_CHECKPOINT,
-        mainnetGitCommit,
-        path,
-      )
-    )
-      throw new Error(`MAINNET_BLOCKED_CONTROL_DRIFT:${path}`);
+  for (const path of RUNTIME_LOCKED_PATHS) {
+    if (!inspection.pathEquals(gate.e2eRuntimeCommit, mainnetGitCommit, path))
+      throw new Error(`MAINNET_BLOCKED_RUNTIME_DRIFT:${path}`);
   }
   if (
     inspection.blobAt(mainnetGitCommit, MANIFEST_VALIDATOR_PATH) !==

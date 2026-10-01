@@ -6,6 +6,7 @@ import {
   ERC8183_NORMATIVE_REVISION,
   ERC8183_SOURCE_COMMIT,
   assertDeploymentManifest,
+  mainnetGateResultHash,
 } from "./manifest.js";
 
 const hash = (byte: string): Hex => `0x${byte.repeat(64)}` as Hex;
@@ -103,6 +104,91 @@ function object(
   return value[key] as Record<string, unknown>;
 }
 
+function validMainnetManifest(): Record<string, unknown> {
+  const manifest = validManifest();
+  delete manifest.testnetGate;
+  manifest.network = "arc-mainnet";
+  manifest.chainId = "5042";
+  const erc8183 = object(manifest, "erc8183");
+  const evaluator = object(manifest, "pactEvaluator");
+  const deploymentTransactions = object(manifest, "deploymentTransactions");
+  const evidenceHash = hash("b");
+  const receiptBlockHash = hash("e");
+  const gate = {
+    schemaVersion: 1 as const,
+    status: "PASS" as const,
+    chainId: "5042" as const,
+    mainnetReleaseCommit: manifest.gitCommit as string,
+    erc8183SourceCommit: ERC8183_SOURCE_COMMIT,
+    completedAt: "2026-09-30T01:00:00.000Z",
+    contracts: {
+      implementation: erc8183.implementation as `0x${string}`,
+      proxy: erc8183.proxy as `0x${string}`,
+      pactEvaluator: evaluator.address as `0x${string}`,
+    },
+    runtimeCodeHashes: {
+      erc8183Implementation: erc8183.implementationCodeHash as Hex,
+      erc8183Proxy: erc8183.proxyCodeHash as Hex,
+      pactEvaluator: evaluator.codeHash as Hex,
+    },
+    roles: {
+      operator: manifest.deployer as `0x${string}`,
+      treasury: erc8183.treasury as `0x${string}`,
+      provider: "0x9999999999999999999999999999999999999999" as const,
+      verifier: evaluator.verifier as `0x${string}`,
+      relay: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" as const,
+    },
+    deploymentTransactions: {
+      implementation: deploymentTransactions.implementation as Hex,
+      proxy: deploymentTransactions.proxy as Hex,
+      allowUsdc: deploymentTransactions.allowUsdc as Hex,
+      evaluator: deploymentTransactions.evaluator as Hex,
+    },
+    jobId: "1",
+    github: {
+      repository: "pact-protocol/demo",
+      pullRequest: 3,
+      baseBranch: "main",
+      mergeCommitSha: `0x${"1".repeat(40)}` as Hex,
+      mergedAt: "2026-09-30T00:30:00.000Z",
+    },
+    conditionHash: hash("a"),
+    evidenceHash,
+    attestationDigest: hash("c"),
+    settlement: {
+      transactionHash: hash("d"),
+      receiptBlockNumber: "789",
+      receiptBlockHash,
+      pactCompletionAccepted: {
+        blockNumber: "789",
+        blockHash: receiptBlockHash,
+        logIndex: 2,
+      },
+      jobCompleted: {
+        blockNumber: "789",
+        blockHash: receiptBlockHash,
+        logIndex: 3,
+      },
+    },
+    broadcastAttemptCount: 1 as const,
+    economics: {
+      budget: "100000",
+      grossFunding: "100000",
+      grossProviderPayout: "100000",
+      treasuryApplicationPayout: "0" as const,
+      evaluatorApplicationPayout: "0" as const,
+      settledAmount: "0",
+      completionReason: evidenceHash,
+    },
+    finalState: { jobStatus: 3 as const, bindingAccepted: true as const },
+  };
+  manifest.mainnetGate = {
+    ...gate,
+    resultHash: mainnetGateResultHash(gate as never),
+  };
+  return manifest;
+}
+
 describe("deployment manifest", () => {
   it("accepts a complete pinned Arc Testnet manifest", () => {
     expect(assertDeploymentManifest(validManifest()).chainId).toBe("5042002");
@@ -151,6 +237,78 @@ describe("deployment manifest", () => {
       hash("f");
     expect(() => assertDeploymentManifest(manifest)).toThrow(
       /testnetGate\.runtimeCodeHashes\.pactEvaluator/,
+    );
+  });
+
+  it("accepts deployed Mainnet without a gate and a complete Mainnet PASS", () => {
+    const preE2E = validMainnetManifest();
+    delete preE2E.mainnetGate;
+    expect(assertDeploymentManifest(preE2E).mainnetGate).toBeUndefined();
+    expect(
+      assertDeploymentManifest(validMainnetManifest()).mainnetGate?.status,
+    ).toBe("PASS");
+  });
+
+  it.each([
+    [
+      "missing settlement evidence",
+      (m: Record<string, unknown>) =>
+        delete object(m, "mainnetGate").settlement,
+    ],
+    [
+      "wrong broadcast count",
+      (m: Record<string, unknown>) =>
+        (object(m, "mainnetGate").broadcastAttemptCount = 2),
+    ],
+    [
+      "payout mismatch",
+      (m: Record<string, unknown>) =>
+        (object(object(m, "mainnetGate"), "economics").grossProviderPayout =
+          "99999"),
+    ],
+    [
+      "completion reason mismatch",
+      (m: Record<string, unknown>) =>
+        (object(object(m, "mainnetGate"), "economics").completionReason =
+          hash("f")),
+    ],
+    [
+      "runtime identity drift",
+      (m: Record<string, unknown>) =>
+        (object(object(m, "mainnetGate"), "runtimeCodeHashes").pactEvaluator =
+          hash("f")),
+    ],
+    [
+      "event coordinate drift",
+      (m: Record<string, unknown>) =>
+        (object(
+          object(object(m, "mainnetGate"), "settlement"),
+          "jobCompleted",
+        ).blockNumber = "790"),
+    ],
+  ])("rejects Mainnet PASS with %s", (_label, mutate) => {
+    const manifest = validMainnetManifest();
+    mutate(manifest);
+    expect(() => assertDeploymentManifest(manifest)).toThrow(
+      /invalid deployment manifest/,
+    );
+  });
+
+  it("keeps Testnet and Mainnet gates independent", () => {
+    const testnet = validManifest();
+    testnet.mainnetGate = object(validMainnetManifest(), "mainnetGate");
+    expect(() => assertDeploymentManifest(testnet)).toThrow(
+      "invalid deployment manifest: mainnetGate network",
+    );
+  });
+
+  it("binds the Mainnet result hash to every factual field", () => {
+    const manifest = validMainnetManifest();
+    const parsed = assertDeploymentManifest(manifest);
+    expect(() => assertDeploymentManifest(parsed)).not.toThrow();
+    object(object(manifest, "mainnetGate"), "github").pullRequest = 4;
+    expect(() => assertDeploymentManifest(manifest)).toThrow(
+      /mainnetGate\.resultHash/,
     );
   });
 

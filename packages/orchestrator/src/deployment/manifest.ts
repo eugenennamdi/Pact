@@ -1,5 +1,13 @@
 import { readFile } from "node:fs/promises";
-import { getAddress, isAddress, isHash, type Address, type Hex } from "viem";
+import {
+  getAddress,
+  isAddress,
+  isHash,
+  keccak256,
+  stringToHex,
+  type Address,
+  type Hex,
+} from "viem";
 
 export const ARC_MAINNET_CHAIN_ID = 5_042n;
 export const ARC_TESTNET_CHAIN_ID = 5_042_002n;
@@ -95,6 +103,97 @@ export interface DeploymentManifest {
       readonly pactEvaluator: Hex;
     };
   };
+  readonly mainnetGate?: {
+    readonly schemaVersion: 1;
+    readonly status: "PASS";
+    readonly chainId: "5042";
+    readonly mainnetReleaseCommit: string;
+    readonly erc8183SourceCommit: typeof ERC8183_SOURCE_COMMIT;
+    readonly completedAt: string;
+    readonly contracts: {
+      readonly implementation: Address;
+      readonly proxy: Address;
+      readonly pactEvaluator: Address;
+    };
+    readonly runtimeCodeHashes: {
+      readonly erc8183Implementation: Hex;
+      readonly erc8183Proxy: Hex;
+      readonly pactEvaluator: Hex;
+    };
+    readonly roles: {
+      readonly operator: Address;
+      readonly treasury: Address;
+      readonly provider: Address;
+      readonly verifier: Address;
+      readonly relay: Address;
+    };
+    readonly deploymentTransactions: {
+      readonly implementation: Hex;
+      readonly proxy: Hex;
+      readonly allowUsdc: Hex;
+      readonly evaluator: Hex;
+    };
+    readonly jobId: string;
+    readonly github: {
+      readonly repository: string;
+      readonly pullRequest: number;
+      readonly baseBranch: string;
+      readonly mergeCommitSha: Hex;
+      readonly mergedAt: string;
+    };
+    readonly conditionHash: Hex;
+    readonly evidenceHash: Hex;
+    readonly attestationDigest: Hex;
+    readonly settlement: {
+      readonly transactionHash: Hex;
+      readonly receiptBlockNumber: string;
+      readonly receiptBlockHash: Hex;
+      readonly pactCompletionAccepted: {
+        readonly blockNumber: string;
+        readonly blockHash: Hex;
+        readonly logIndex: number;
+      };
+      readonly jobCompleted: {
+        readonly blockNumber: string;
+        readonly blockHash: Hex;
+        readonly logIndex: number;
+      };
+    };
+    readonly broadcastAttemptCount: 1;
+    readonly economics: {
+      readonly budget: string;
+      readonly grossFunding: string;
+      readonly grossProviderPayout: string;
+      readonly treasuryApplicationPayout: "0";
+      readonly evaluatorApplicationPayout: "0";
+      readonly settledAmount: "0";
+      readonly completionReason: Hex;
+    };
+    readonly finalState: {
+      readonly jobStatus: 3;
+      readonly bindingAccepted: true;
+    };
+    readonly resultHash: Hex;
+  };
+}
+
+function canonical(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
+  if (typeof value === "object" && value !== null) {
+    const entries = Object.entries(value as Record<string, unknown>).sort(
+      ([left], [right]) => left.localeCompare(right),
+    );
+    return `{${entries
+      .map(([key, item]) => `${JSON.stringify(key)}:${canonical(item)}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
+export function mainnetGateResultHash(
+  gate: Omit<NonNullable<DeploymentManifest["mainnetGate"]>, "resultHash">,
+): Hex {
+  return keccak256(stringToHex(canonical(gate)));
 }
 
 function record(value: unknown, path: string): Record<string, unknown> {
@@ -148,6 +247,44 @@ function isoDate(value: unknown, path: string): string {
       `invalid deployment manifest: ${path} must be an ISO UTC timestamp`,
     );
   return raw;
+}
+
+function gitCommitSha(value: unknown, path: string): Hex {
+  const raw = string(value, path);
+  if (!/^0x[0-9a-f]{40}$/.test(raw))
+    throw new Error(`invalid deployment manifest: ${path}`);
+  return raw as Hex;
+}
+
+function integerString(value: unknown, path: string, positive = false): string {
+  const raw = string(value, path);
+  if (!/^(0|[1-9]\d*)$/.test(raw) || (positive && raw === "0"))
+    throw new Error(`invalid deployment manifest: ${path}`);
+  return raw;
+}
+
+function eventCoordinate(
+  value: unknown,
+  path: string,
+): {
+  readonly blockNumber: string;
+  readonly blockHash: Hex;
+  readonly logIndex: number;
+} {
+  const event = record(value, path);
+  const blockNumber = integerString(
+    event.blockNumber,
+    `${path}.blockNumber`,
+    true,
+  );
+  const blockHash = hash(event.blockHash, `${path}.blockHash`);
+  if (
+    typeof event.logIndex !== "number" ||
+    !Number.isSafeInteger(event.logIndex) ||
+    event.logIndex < 0
+  )
+    throw new Error(`invalid deployment manifest: ${path}.logIndex`);
+  return { blockNumber, blockHash, logIndex: event.logIndex };
 }
 
 export function assertDeploymentManifest(input: unknown): DeploymentManifest {
@@ -328,6 +465,220 @@ export function assertDeploymentManifest(input: unknown): DeploymentManifest {
       ),
       hash(evaluator.codeHash, "pactEvaluator.codeHash"),
       "testnetGate.runtimeCodeHashes.pactEvaluator",
+    );
+  }
+
+  if (root.mainnetGate !== undefined) {
+    if (network !== "arc-mainnet")
+      throw new Error("invalid deployment manifest: mainnetGate network");
+    const gate = record(root.mainnetGate, "mainnetGate");
+    literal(gate.schemaVersion, 1, "mainnetGate.schemaVersion");
+    literal(gate.status, "PASS", "mainnetGate.status");
+    literal(gate.chainId, "5042", "mainnetGate.chainId");
+    literal(
+      gate.mainnetReleaseCommit,
+      gitCommit,
+      "mainnetGate.mainnetReleaseCommit",
+    );
+    literal(
+      gate.erc8183SourceCommit,
+      ERC8183_SOURCE_COMMIT,
+      "mainnetGate.erc8183SourceCommit",
+    );
+    isoDate(gate.completedAt, "mainnetGate.completedAt");
+
+    const contracts = record(gate.contracts, "mainnetGate.contracts");
+    literal(
+      address(contracts.implementation, "mainnetGate.contracts.implementation"),
+      address(erc.implementation, "erc8183.implementation"),
+      "mainnetGate.contracts.implementation",
+    );
+    literal(
+      address(contracts.proxy, "mainnetGate.contracts.proxy"),
+      proxy,
+      "mainnetGate.contracts.proxy",
+    );
+    literal(
+      address(contracts.pactEvaluator, "mainnetGate.contracts.pactEvaluator"),
+      address(evaluator.address, "pactEvaluator.address"),
+      "mainnetGate.contracts.pactEvaluator",
+    );
+
+    const runtime = record(
+      gate.runtimeCodeHashes,
+      "mainnetGate.runtimeCodeHashes",
+    );
+    literal(
+      hash(
+        runtime.erc8183Implementation,
+        "mainnetGate.runtimeCodeHashes.erc8183Implementation",
+      ),
+      hash(erc.implementationCodeHash, "erc8183.implementationCodeHash"),
+      "mainnetGate.runtimeCodeHashes.erc8183Implementation",
+    );
+    literal(
+      hash(runtime.erc8183Proxy, "mainnetGate.runtimeCodeHashes.erc8183Proxy"),
+      hash(erc.proxyCodeHash, "erc8183.proxyCodeHash"),
+      "mainnetGate.runtimeCodeHashes.erc8183Proxy",
+    );
+    literal(
+      hash(
+        runtime.pactEvaluator,
+        "mainnetGate.runtimeCodeHashes.pactEvaluator",
+      ),
+      hash(evaluator.codeHash, "pactEvaluator.codeHash"),
+      "mainnetGate.runtimeCodeHashes.pactEvaluator",
+    );
+
+    const roles = record(gate.roles, "mainnetGate.roles");
+    literal(
+      address(roles.operator, "mainnetGate.roles.operator"),
+      address(root.deployer, "deployer"),
+      "mainnetGate.roles.operator",
+    );
+    literal(
+      address(roles.treasury, "mainnetGate.roles.treasury"),
+      address(erc.treasury, "erc8183.treasury"),
+      "mainnetGate.roles.treasury",
+    );
+    address(roles.provider, "mainnetGate.roles.provider");
+    literal(
+      address(roles.verifier, "mainnetGate.roles.verifier"),
+      address(evaluator.verifier, "pactEvaluator.verifier"),
+      "mainnetGate.roles.verifier",
+    );
+    address(roles.relay, "mainnetGate.roles.relay");
+
+    const gateTransactions = record(
+      gate.deploymentTransactions,
+      "mainnetGate.deploymentTransactions",
+    );
+    for (const key of [
+      "implementation",
+      "proxy",
+      "allowUsdc",
+      "evaluator",
+    ] as const)
+      literal(
+        hash(
+          gateTransactions[key],
+          `mainnetGate.deploymentTransactions.${key}`,
+        ),
+        hash(transactions[key], `deploymentTransactions.${key}`),
+        `mainnetGate.deploymentTransactions.${key}`,
+      );
+
+    integerString(gate.jobId, "mainnetGate.jobId", true);
+    const github = record(gate.github, "mainnetGate.github");
+    string(github.repository, "mainnetGate.github.repository");
+    if (
+      typeof github.pullRequest !== "number" ||
+      !Number.isSafeInteger(github.pullRequest) ||
+      github.pullRequest <= 0
+    )
+      throw new Error(
+        "invalid deployment manifest: mainnetGate.github.pullRequest",
+      );
+    string(github.baseBranch, "mainnetGate.github.baseBranch");
+    gitCommitSha(github.mergeCommitSha, "mainnetGate.github.mergeCommitSha");
+    isoDate(github.mergedAt, "mainnetGate.github.mergedAt");
+    hash(gate.conditionHash, "mainnetGate.conditionHash");
+    const evidenceHash = hash(gate.evidenceHash, "mainnetGate.evidenceHash");
+    hash(gate.attestationDigest, "mainnetGate.attestationDigest");
+
+    const settlement = record(gate.settlement, "mainnetGate.settlement");
+    hash(settlement.transactionHash, "mainnetGate.settlement.transactionHash");
+    const receiptBlockNumber = integerString(
+      settlement.receiptBlockNumber,
+      "mainnetGate.settlement.receiptBlockNumber",
+      true,
+    );
+    const receiptBlockHash = hash(
+      settlement.receiptBlockHash,
+      "mainnetGate.settlement.receiptBlockHash",
+    );
+    const pactEvent = eventCoordinate(
+      settlement.pactCompletionAccepted,
+      "mainnetGate.settlement.pactCompletionAccepted",
+    );
+    const jobEvent = eventCoordinate(
+      settlement.jobCompleted,
+      "mainnetGate.settlement.jobCompleted",
+    );
+    if (
+      pactEvent.blockNumber !== receiptBlockNumber ||
+      jobEvent.blockNumber !== receiptBlockNumber ||
+      pactEvent.blockHash !== receiptBlockHash ||
+      jobEvent.blockHash !== receiptBlockHash
+    )
+      throw new Error(
+        "invalid deployment manifest: mainnetGate settlement coordinates",
+      );
+    literal(gate.broadcastAttemptCount, 1, "mainnetGate.broadcastAttemptCount");
+
+    const economics = record(gate.economics, "mainnetGate.economics");
+    const budget = integerString(
+      economics.budget,
+      "mainnetGate.economics.budget",
+      true,
+    );
+    literal(
+      integerString(
+        economics.grossFunding,
+        "mainnetGate.economics.grossFunding",
+      ),
+      budget,
+      "mainnetGate.economics.grossFunding",
+    );
+    literal(
+      integerString(
+        economics.grossProviderPayout,
+        "mainnetGate.economics.grossProviderPayout",
+      ),
+      budget,
+      "mainnetGate.economics.grossProviderPayout",
+    );
+    literal(
+      economics.treasuryApplicationPayout,
+      "0",
+      "mainnetGate.economics.treasuryApplicationPayout",
+    );
+    literal(
+      economics.evaluatorApplicationPayout,
+      "0",
+      "mainnetGate.economics.evaluatorApplicationPayout",
+    );
+    literal(
+      economics.settledAmount,
+      "0",
+      "mainnetGate.economics.settledAmount",
+    );
+    literal(
+      hash(
+        economics.completionReason,
+        "mainnetGate.economics.completionReason",
+      ),
+      evidenceHash,
+      "mainnetGate.economics.completionReason",
+    );
+    const finalState = record(gate.finalState, "mainnetGate.finalState");
+    literal(finalState.jobStatus, 3, "mainnetGate.finalState.jobStatus");
+    literal(
+      finalState.bindingAccepted,
+      true,
+      "mainnetGate.finalState.bindingAccepted",
+    );
+    const resultHash = hash(gate.resultHash, "mainnetGate.resultHash");
+    const { resultHash: _ignored, ...resultInput } = gate;
+    literal(
+      resultHash,
+      mainnetGateResultHash(
+        resultInput as Omit<
+          NonNullable<DeploymentManifest["mainnetGate"]>,
+          "resultHash"
+        >,
+      ),
+      "mainnetGate.resultHash",
     );
   }
 

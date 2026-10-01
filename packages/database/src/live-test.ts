@@ -682,6 +682,22 @@ async function run(): Promise<void> {
   assert.equal(activeTriggerOperations[0]?.value, 1);
   pass("concurrent webhook/manual trigger produces one active workflow");
 
+  const idempotentPact = pactFixture("terminal-trigger-idempotency");
+  await repository.createPact(idempotentPact);
+  const durableTrigger = `phase5-terminal:${crypto.randomUUID()}`;
+  const firstTerminalOperation = await repository.enqueueManualOperation(
+    idempotentPact.id,
+    durableTrigger,
+  );
+  await workingDatabase.sql`update operations set state = 'ALREADY_ACCEPTED', updated_at = now() where id = ${firstTerminalOperation.id}::uuid`;
+  const repeatedTerminalOperation = await repositoryB.enqueueManualOperation(
+    idempotentPact.id,
+    durableTrigger,
+  );
+  assert.equal(repeatedTerminalOperation.id, firstTerminalOperation.id);
+  assert.equal(repeatedTerminalOperation.state, "ALREADY_ACCEPTED");
+  pass("exact durable manual trigger returns its existing terminal operation");
+
   const casPact = pactFixture("cas-races");
   await repository.createPact(casPact);
   const casOperationId = await insertOperation(
