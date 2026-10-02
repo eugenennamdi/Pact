@@ -42,6 +42,7 @@ import { verifyDeploymentIntegrity } from "./integrity.js";
 import {
   assertDeploymentManifest,
   assertMainnetGate,
+  assertMainnetManifestProvenance,
   loadDeploymentManifest,
   mainnetGateResultHash,
 } from "./manifest.js";
@@ -1192,11 +1193,18 @@ async function runControlledOperator(): Promise<void> {
         completionEvents[0].logIndex === null
       )
         throw new Error("MAINNET_GATE_EVENT_COORDINATES_MISSING");
+      const testnetCertification = await loadDeploymentManifest(
+        required("PACT_TESTNET_MANIFEST_PATH"),
+      );
+      if (testnetCertification.testnetGate?.status !== "PASS")
+        throw new Error("MAINNET_GATE_TESTNET_PROVENANCE_MISSING");
       const gateWithoutHash = {
         schemaVersion: 1 as const,
         status: "PASS" as const,
         chainId: "5042" as const,
         mainnetReleaseCommit: gitCommit,
+        testnetCertifiedRuntimeCommit:
+          testnetCertification.testnetGate.e2eRuntimeCommit,
         erc8183SourceCommit: manifest.erc8183.sourceCommit,
         completedAt: new Date().toISOString(),
         contracts: {
@@ -1262,13 +1270,16 @@ async function runControlledOperator(): Promise<void> {
       };
       if (settlementIntent.broadcastAttemptCount !== 1)
         throw new Error("MAINNET_GATE_BROADCAST_COUNT_INVALID");
-      const gated = assertDeploymentManifest({
-        ...manifest,
-        mainnetGate: {
-          ...gateWithoutHash,
-          resultHash: mainnetGateResultHash(gateWithoutHash),
+      const gated = assertMainnetManifestProvenance(
+        {
+          ...manifest,
+          mainnetGate: {
+            ...gateWithoutHash,
+            resultHash: mainnetGateResultHash(gateWithoutHash),
+          },
         },
-      });
+        testnetCertification,
+      );
       const temporary = `${manifestPath}.tmp`;
       await writeFile(temporary, `${JSON.stringify(gated, null, 2)}\n`, {
         mode: 0o644,

@@ -1,0 +1,131 @@
+{
+  "schemaVersion": 1,
+  "status": "DEPLOYED",
+  "network": "arc-mainnet",
+  "chainId": "5042",
+  "deploymentTimestamp": "2026-10-02T07:42:52.292Z",
+  "deploymentBlock": "23845707",
+  "deployer": "0x1f320aF0E8F11b89eD88ddD8C549B39F6081954b",
+  "gitCommit": "b5792c756b04fae543b1d3d92a337858ea9f529d",
+  "usdc": {
+    "address": "0x3600000000000000000000000000000000000000",
+    "decimals": 6
+  },
+  "erc8183": {
+    "classification": "PACT_MANAGED_PINNED",
+    "proxy": "0x9Da745D2A6e03b049bdAE5aE7a193f1B00E520d6",
+    "implementation": "0x4B46C1aa98B1d82cF4eeFFDDD129a57402851901",
+    "proxyCodeHash": "0xd8213adf7f6483871a80a460216b7cd380d7c406ae464724918f93cf25acbe7e",
+    "implementationCodeHash": "0xccb56cc8abdfa8f1f2f3e5bb5311cd70dee78808a1445fd884b987ba660b323c",
+    "sourceCommit": "142e669c1fd318486a4628395b629f033654dd06",
+    "normativeRevision": "a078cab5cc8e9581c15f76c091ed96eed28f02f7",
+    "defaultAdmin": "0x1f320aF0E8F11b89eD88ddD8C549B39F6081954b",
+    "admin": "0x1f320aF0E8F11b89eD88ddD8C549B39F6081954b",
+    "treasury": "0x369B2318bA3C63BCE48892e92476465D7098D11E",
+    "platformFeeBps": "0",
+    "evaluatorFeeBps": "0",
+    "paused": false,
+    "paymentTokenAllowed": true,
+    "hookPolicy": "NONE"
+  },
+  "pactEvaluator": {
+    "address": "0x3fd3AC5bE6eE41DcD11233833DCD96c21F3b1129",
+    "codeHash": "0x35d124f90387d319cd10db9b8a15dd6ed4f4818b300f6b149fcf6f0fde4f37fd",
+    "artifactBytecodeHash": "0xd965f1c6b1574e32ca258e300558eb37bfef0ec253c0a02a4ebf7d05a546b487",
+    "commerceContract": "0x9Da745D2A6e03b049bdAE5aE7a193f1B00E520d6",
+    "verifier": "0x8660A25bf52D24EbD1C4DFcF602840114b92c48d",
+    "admin": "0x1f320aF0E8F11b89eD88ddD8C549B39F6081954b",
+    "domainVersion": "2"
+  },
+  "toolchain": {
+    "solidity": "0.8.28",
+    "evmTarget": "cancun",
+    "foundryVersion": "v1.8.3",
+    "openZeppelinVersion": "5.6.1",
+    "viemVersion": "2.56.9"
+  },
+  "deploymentTransactions": {
+    "implementation": "0x643425b41c6e6d935682f98c6a9d3bf200288cc185473f79d1c762dedc9f1a3d",
+    "proxy": "0xdc924878457f61650304f684611f48d2b39ecfc4fa04d2acfc59fb620fea7391",
+    "allowUsdc": "0xd1b135ec4199afb280d99ff6b7fc74777ce2cbe31764f37b71e8137782c63ee8",
+    "evaluator": "0xd837cb71af2691006b8d2b9ba7a51c91684b266d38597e8692bdaf7b65421eac"
+  },
+  "sourceVerification": {
+    "erc8183Implementation": "UNAVAILABLE",
+    "erc8183Proxy": "UNAVAILABLE",
+    "pactEvaluator": "UNAVAILABLE"
+  },
+  "mainnetGate": {
+    "schemaVersion": 1,
+    "status": "PASS",
+    "chainId": "5042",
+    "mainnetReleaseCommit": "b5792c756b04fae543b1d3d92a337858ea9f529d",
+    "testnetCertifiedRuntimeCommit": "fa20328df6643b0d85f6c2b6074d79dd0e5de54c",
+    "erc8183SourceCommit": "142e669c1fd318486a4628395b629f033654dd06",
+    "completedAt": "2026-10-02T07:55:45.729Z",
+    "contracts": {
+      "implementation": "0x4B46C1aa98B1d82cF4eeFFDDD129a57402851901",
+      "proxy": "0x9Da745D2A6e03b049bdAE5aE7a193f1B00E520d6",
+      "pactEvaluator": "0x3fd3AC5bE6eE41DcD11233833DCD96c21F3b1129"
+    },
+    "runtimeCodeHashes": {
+      "erc8183Implementation": "0xccb56cc8abdfa8f1f2f3e5bb5311cd70dee78808a1445fd884b987ba660b323c",
+      "erc8183Proxy": "0xd8213adf7f6483871a80a460216b7cd380d7c406ae464724918f93cf25acbe7e",
+      "pactEvaluator": "0x35d124f90387d319cd10db9b8a15dd6ed4f4818b300f6b149fcf6f0fde4f37fd"
+    },
+    "roles": {
+      "operator": "0x1f320aF0E8F11b89eD88ddD8C549B39F6081954b",
+      "treasury": "0x369B2318bA3C63BCE48892e92476465D7098D11E",
+      "provider": "0xd857612A587DF68b0C2627208Bdd9F934695A231",
+      "verifier": "0x8660A25bf52D24EbD1C4DFcF602840114b92c48d",
+      "relay": "0x49a5F99Cdf8b9683459A467e9b71a554495Ecc52"
+    },
+    "deploymentTransactions": {
+      "implementation": "0x643425b41c6e6d935682f98c6a9d3bf200288cc185473f79d1c762dedc9f1a3d",
+      "proxy": "0xdc924878457f61650304f684611f48d2b39ecfc4fa04d2acfc59fb620fea7391",
+      "allowUsdc": "0xd1b135ec4199afb280d99ff6b7fc74777ce2cbe31764f37b71e8137782c63ee8",
+      "evaluator": "0xd837cb71af2691006b8d2b9ba7a51c91684b266d38597e8692bdaf7b65421eac"
+    },
+    "jobId": "1",
+    "github": {
+      "repository": "eugenennamdi/pact-arc-demo",
+      "pullRequest": 4,
+      "baseBranch": "main",
+      "mergeCommitSha": "0x77747ef7d279e72abede73dba77a29c3cb3a3e68",
+      "mergedAt": "2026-10-02T07:54:06.000Z"
+    },
+    "conditionHash": "0x2dce4e61e9105cee9c31cbc8eaf6002a7c10e2b51ee4c88a9324d3219eb759bf",
+    "evidenceHash": "0x141dafc8d62be748f96793f0855e8937eee5cc6cdede10acf34c93363c725e1d",
+    "attestationDigest": "0x881f8451d6bc11c0912e6aaef17cbd403c5f41f78d400adc46a50b4fb90b6fd8",
+    "settlement": {
+      "transactionHash": "0x876a6b547bbc512cb8b6ba99a1e6054fad6a1491edb1a18418ec05f860a65d66",
+      "receiptBlockNumber": "23847193",
+      "receiptBlockHash": "0x46c0f21755e9920ca1ad0d5b5ce8b32ec3d1ba8d44636f20b009c2ff3c2fefc6",
+      "pactCompletionAccepted": {
+        "blockNumber": "23847193",
+        "blockHash": "0x46c0f21755e9920ca1ad0d5b5ce8b32ec3d1ba8d44636f20b009c2ff3c2fefc6",
+        "logIndex": 18
+      },
+      "jobCompleted": {
+        "blockNumber": "23847193",
+        "blockHash": "0x46c0f21755e9920ca1ad0d5b5ce8b32ec3d1ba8d44636f20b009c2ff3c2fefc6",
+        "logIndex": 22
+      }
+    },
+    "broadcastAttemptCount": 1,
+    "economics": {
+      "budget": "100000",
+      "grossFunding": "100000",
+      "grossProviderPayout": "100000",
+      "treasuryApplicationPayout": "0",
+      "evaluatorApplicationPayout": "0",
+      "settledAmount": "0",
+      "completionReason": "0x141dafc8d62be748f96793f0855e8937eee5cc6cdede10acf34c93363c725e1d"
+    },
+    "finalState": {
+      "jobStatus": 3,
+      "bindingAccepted": true
+    },
+    "resultHash": "0x69df35a9224d7c259387fa84adf7162e4de470611aa910ac7664c8eb85cba836"
+  }
+}

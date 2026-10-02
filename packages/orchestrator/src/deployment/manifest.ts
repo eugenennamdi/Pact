@@ -17,6 +17,8 @@ export const ERC8183_SOURCE_COMMIT =
   "142e669c1fd318486a4628395b629f033654dd06" as const;
 export const ERC8183_NORMATIVE_REVISION =
   "a078cab5cc8e9581c15f76c091ed96eed28f02f7" as const;
+export const TESTNET_CERTIFIED_RUNTIME_COMMIT =
+  "fa20328df6643b0d85f6c2b6074d79dd0e5de54c" as const;
 
 export type PactNetwork = "arc-testnet" | "arc-mainnet";
 
@@ -108,6 +110,7 @@ export interface DeploymentManifest {
     readonly status: "PASS";
     readonly chainId: "5042";
     readonly mainnetReleaseCommit: string;
+    readonly testnetCertifiedRuntimeCommit: string;
     readonly erc8183SourceCommit: typeof ERC8183_SOURCE_COMMIT;
     readonly completedAt: string;
     readonly contracts: {
@@ -480,6 +483,14 @@ export function assertDeploymentManifest(input: unknown): DeploymentManifest {
       gitCommit,
       "mainnetGate.mainnetReleaseCommit",
     );
+    const testnetCertifiedRuntimeCommit = string(
+      gate.testnetCertifiedRuntimeCommit,
+      "mainnetGate.testnetCertifiedRuntimeCommit",
+    );
+    if (!/^[0-9a-f]{40}$/.test(testnetCertifiedRuntimeCommit))
+      throw new Error(
+        "invalid deployment manifest: mainnetGate.testnetCertifiedRuntimeCommit must be a full lowercase commit hash",
+      );
     literal(
       gate.erc8183SourceCommit,
       ERC8183_SOURCE_COMMIT,
@@ -696,6 +707,34 @@ export function assertDeploymentManifest(input: unknown): DeploymentManifest {
   address(evaluator.verifier, "pactEvaluator.verifier");
   address(evaluator.admin, "pactEvaluator.admin");
   return input as DeploymentManifest;
+}
+
+export function assertMainnetManifestProvenance(
+  input: unknown,
+  testnetInput: unknown,
+): DeploymentManifest {
+  const mainnet = assertDeploymentManifest(input);
+  const testnet = assertDeploymentManifest(testnetInput);
+  if (
+    mainnet.network !== "arc-mainnet" ||
+    mainnet.mainnetGate?.status !== "PASS" ||
+    testnet.network !== "arc-testnet" ||
+    testnet.testnetGate?.status !== "PASS"
+  )
+    throw new Error(
+      "invalid deployment manifest: canonical Testnet PASS manifest is required for Mainnet gate provenance",
+    );
+  literal(
+    testnet.testnetGate.e2eRuntimeCommit,
+    TESTNET_CERTIFIED_RUNTIME_COMMIT,
+    "testnetGate.e2eRuntimeCommit",
+  );
+  literal(
+    mainnet.mainnetGate.testnetCertifiedRuntimeCommit,
+    testnet.testnetGate.e2eRuntimeCommit,
+    "mainnetGate.testnetCertifiedRuntimeCommit",
+  );
+  return mainnet;
 }
 
 export async function loadDeploymentManifest(

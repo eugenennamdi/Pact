@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { keccak256, type Hex } from "viem";
 import { assertDeploymentCodeSnapshot } from "./integrity.js";
@@ -5,7 +6,9 @@ import {
   ARC_USDC_ADDRESS,
   ERC8183_NORMATIVE_REVISION,
   ERC8183_SOURCE_COMMIT,
+  TESTNET_CERTIFIED_RUNTIME_COMMIT,
   assertDeploymentManifest,
+  assertMainnetManifestProvenance,
   mainnetGateResultHash,
 } from "./manifest.js";
 
@@ -71,7 +74,7 @@ function validManifest(): Record<string, unknown> {
     testnetGate: {
       status: "PASS",
       deploymentGitCommit: gitCommit,
-      e2eRuntimeCommit: "b".repeat(40),
+      e2eRuntimeCommit: TESTNET_CERTIFIED_RUNTIME_COMMIT,
       erc8183SourceCommit: ERC8183_SOURCE_COMMIT,
       evaluatorCodeHash: hash("9"),
       completedAt: "2026-09-29T01:00:00.000Z",
@@ -119,6 +122,7 @@ function validMainnetManifest(): Record<string, unknown> {
     status: "PASS" as const,
     chainId: "5042" as const,
     mainnetReleaseCommit: manifest.gitCommit as string,
+    testnetCertifiedRuntimeCommit: TESTNET_CERTIFIED_RUNTIME_COMMIT,
     erc8183SourceCommit: ERC8183_SOURCE_COMMIT,
     completedAt: "2026-09-30T01:00:00.000Z",
     contracts: {
@@ -228,7 +232,9 @@ describe("deployment manifest", () => {
     const manifest = assertDeploymentManifest(validManifest());
     expect(manifest.gitCommit).toBe("a".repeat(40));
     expect(manifest.testnetGate?.deploymentGitCommit).toBe("a".repeat(40));
-    expect(manifest.testnetGate?.e2eRuntimeCommit).toBe("b".repeat(40));
+    expect(manifest.testnetGate?.e2eRuntimeCommit).toBe(
+      TESTNET_CERTIFIED_RUNTIME_COMMIT,
+    );
   });
 
   it("rejects Testnet gate runtime-code provenance drift", () => {
@@ -245,8 +251,64 @@ describe("deployment manifest", () => {
     delete preE2E.mainnetGate;
     expect(assertDeploymentManifest(preE2E).mainnetGate).toBeUndefined();
     expect(
-      assertDeploymentManifest(validMainnetManifest()).mainnetGate?.status,
+      assertMainnetManifestProvenance(validMainnetManifest(), validManifest())
+        .mainnetGate?.status,
     ).toBe("PASS");
+  });
+
+  it("rejects Mainnet PASS missing Testnet-certified runtime provenance", () => {
+    const manifest = validMainnetManifest();
+    delete object(manifest, "mainnetGate").testnetCertifiedRuntimeCommit;
+    expect(() => assertDeploymentManifest(manifest)).toThrow(
+      /mainnetGate\.testnetCertifiedRuntimeCommit/,
+    );
+  });
+
+  it("rejects malformed Mainnet Testnet-certified runtime provenance", () => {
+    const manifest = validMainnetManifest();
+    object(manifest, "mainnetGate").testnetCertifiedRuntimeCommit = "not-a-sha";
+    expect(() => assertDeploymentManifest(manifest)).toThrow(
+      /mainnetGate\.testnetCertifiedRuntimeCommit/,
+    );
+  });
+
+  it("rejects a different syntactically valid Testnet runtime commit", () => {
+    const manifest = validMainnetManifest();
+    const gate = object(manifest, "mainnetGate");
+    gate.testnetCertifiedRuntimeCommit = "d".repeat(40);
+    delete gate.resultHash;
+    gate.resultHash = mainnetGateResultHash(gate as never);
+    expect(() =>
+      assertMainnetManifestProvenance(manifest, validManifest()),
+    ).toThrow(/mainnetGate\.testnetCertifiedRuntimeCommit/);
+  });
+
+  it("rejects tampered canonical Testnet runtime provenance", () => {
+    const testnet = validManifest();
+    object(testnet, "testnetGate").e2eRuntimeCommit = "d".repeat(40);
+    expect(() =>
+      assertMainnetManifestProvenance(validMainnetManifest(), testnet),
+    ).toThrow(/testnetGate\.e2eRuntimeCommit/);
+  });
+
+  it("requires Testnet-certified runtime provenance in the versioned schema", () => {
+    const schema = JSON.parse(
+      readFileSync("deployments/manifest.schema.json", "utf8"),
+    ) as {
+      properties: {
+        mainnetGate: {
+          required: string[];
+          properties: Record<string, { pattern?: string }>;
+        };
+      };
+    };
+    expect(schema.properties.mainnetGate.required).toContain(
+      "testnetCertifiedRuntimeCommit",
+    );
+    expect(
+      schema.properties.mainnetGate.properties.testnetCertifiedRuntimeCommit
+        ?.pattern,
+    ).toBe("^[0-9a-f]{40}$");
   });
 
   it.each([
@@ -285,6 +347,22 @@ describe("deployment manifest", () => {
           object(object(m, "mainnetGate"), "settlement"),
           "jobCompleted",
         ).blockNumber = "790"),
+    ],
+    [
+      "chain identity drift",
+      (m: Record<string, unknown>) =>
+        (object(m, "mainnetGate").chainId = "5042002"),
+    ],
+    [
+      "release identity drift",
+      (m: Record<string, unknown>) =>
+        (object(m, "mainnetGate").mainnetReleaseCommit = "d".repeat(40)),
+    ],
+    [
+      "contract identity drift",
+      (m: Record<string, unknown>) =>
+        (object(object(m, "mainnetGate"), "contracts").proxy =
+          "0x9999999999999999999999999999999999999999"),
     ],
   ])("rejects Mainnet PASS with %s", (_label, mutate) => {
     const manifest = validMainnetManifest();

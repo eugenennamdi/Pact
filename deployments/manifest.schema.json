@@ -232,6 +232,7 @@
         "status",
         "chainId",
         "mainnetReleaseCommit",
+        "testnetCertifiedRuntimeCommit",
         "erc8183SourceCommit",
         "completedAt",
         "contracts",
@@ -254,6 +255,10 @@
         "status": { "const": "PASS" },
         "chainId": { "const": "5042" },
         "mainnetReleaseCommit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "testnetCertifiedRuntimeCommit": {
           "type": "string",
           "pattern": "^[0-9a-f]{40}$"
         },
