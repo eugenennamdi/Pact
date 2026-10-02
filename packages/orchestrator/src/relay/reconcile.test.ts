@@ -371,6 +371,30 @@ describe("canonical receipt/event/post-state reconciliation", () => {
     });
   });
 
+  it("keeps an exact canonical event retryable until its receipt is readable", () => {
+    const artifact = fixture();
+    expect(
+      reconcileRelayObservation({
+        intent: intent(artifact),
+        artifact,
+        observation: {
+          transactionFound: true,
+          completionEvents: [event(artifact)],
+          snapshot: snapshot(artifact, {
+            bindingAccepted: true,
+            jobStatus: 3,
+          }),
+          latestNonce: 8,
+          pendingNonce: 8,
+        },
+      }),
+    ).toMatchObject({
+      state: "BROADCAST_UNKNOWN",
+      code: "CANONICAL_EVENT_RECEIPT_PENDING",
+      retryable: true,
+    });
+  });
+
   it("keeps absence ambiguous regardless of nonce diagnostics", () => {
     const artifact = fixture();
     for (const [latestNonce, pendingNonce] of [

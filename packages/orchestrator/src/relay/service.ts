@@ -431,6 +431,10 @@ export function createPactRelayService(options: PactRelayServiceOptions) {
 
   return Object.freeze({
     async process(): Promise<RelayProcessResult> {
+      await options.repository.recoverSuccessReceiptObservationRaces(
+        options.signer.address,
+        options.configuredChainId,
+      );
       const signed = await options.repository.listIntents(["SIGNED"], 1);
       if (signed[0] !== undefined) {
         const artifact = await options.repository.findArtifactByIntent(

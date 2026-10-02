@@ -247,8 +247,14 @@ export function reconcileRelayObservation(input: {
     const settlementReceipt = external
       ? observation.canonicalEventReceipt
       : observation.receipt;
+    if (settlementReceipt === undefined)
+      return {
+        state: "BROADCAST_UNKNOWN",
+        code: "CANONICAL_EVENT_RECEIPT_PENDING",
+        retryable: true,
+        outcome: eventOutcome(exactEvent),
+      };
     if (
-      settlementReceipt === undefined ||
       settlementReceipt.status !== "success" ||
       settlementReceipt.transactionHash !== exactEvent.transactionHash
     )

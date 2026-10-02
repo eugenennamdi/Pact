@@ -1,4 +1,13 @@
-import { and, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
+import {
+  and,
+  desc,
+  eq,
+  inArray,
+  isNotNull,
+  isNull,
+  or,
+  sql,
+} from "drizzle-orm";
 import {
   hashGithubPrMergedCondition,
   hashPactGitHubPrMergedEvidenceV1,
@@ -294,15 +303,27 @@ export class PostgresRelayRepository {
           eq(relayIntents.relayAddress, getAddress(relayAddress)),
           eq(relayIntents.chainId, chainId.toString()),
           eq(relayIntents.state, "INTEGRITY_FAILURE"),
-          eq(relayIntents.code, "SUCCESS_RECEIPT_WITHOUT_SETTLEMENT"),
           eq(relayIntents.retryable, false),
           eq(relayIntents.broadcastAttemptCount, 1),
-          eq(relayIntents.receiptStatus, "success"),
-          isNotNull(relayIntents.receiptBlockNumber),
-          isNotNull(relayIntents.receiptBlockHash),
-          isNull(relayIntents.eventBlockNumber),
           sql`${relayIntents.expectedTxHash} = ${relayIntents.returnedTxHash}`,
-          sql`${relayIntents.expectedTxHash} = ${relayIntents.canonicalTxHash}`,
+          or(
+            and(
+              eq(relayIntents.code, "SUCCESS_RECEIPT_WITHOUT_SETTLEMENT"),
+              eq(relayIntents.receiptStatus, "success"),
+              isNotNull(relayIntents.receiptBlockNumber),
+              isNotNull(relayIntents.receiptBlockHash),
+              isNull(relayIntents.eventBlockNumber),
+              sql`${relayIntents.expectedTxHash} = ${relayIntents.canonicalTxHash}`,
+            ),
+            and(
+              eq(relayIntents.code, "CANONICAL_EVENT_RECEIPT_MISMATCH"),
+              isNull(relayIntents.receiptStatus),
+              isNull(relayIntents.receiptBlockNumber),
+              isNull(relayIntents.receiptBlockHash),
+              isNull(relayIntents.canonicalTxHash),
+              isNull(relayIntents.eventBlockNumber),
+            ),
+          ),
         ),
       )
       .returning({ id: relayIntents.id });

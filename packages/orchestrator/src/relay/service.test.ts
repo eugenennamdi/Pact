@@ -289,7 +289,8 @@ class MemoryRelayRepository implements RelayRepository {
   async recoverSuccessReceiptObservationRaces() {
     if (
       this.intent?.state !== "INTEGRITY_FAILURE" ||
-      this.intent.code !== "SUCCESS_RECEIPT_WITHOUT_SETTLEMENT"
+      (this.intent.code !== "SUCCESS_RECEIPT_WITHOUT_SETTLEMENT" &&
+        this.intent.code !== "CANONICAL_EVENT_RECEIPT_MISMATCH")
     )
       return 0;
     this.intent = {
@@ -594,6 +595,27 @@ describe("single-dispatch Pact relay service", () => {
       receiptTransactionIndex: 0,
       canonicalTxHash: submitted.expectedTxHash,
     };
+    await expect(context.service.reconcile()).resolves.toEqual([
+      expect.objectContaining({ state: "SETTLED" }),
+    ]);
+    expect(context.sends()).toBe(1);
+  });
+
+  it("recovers an event-visible/receipt-pending race without a second send", async () => {
+    const context = setup();
+    await expect(context.service.process()).resolves.toMatchObject({
+      state: "SUBMITTED",
+    });
+    const submitted = context.repository.intent!;
+    context.repository.intent = {
+      ...submitted,
+      state: "INTEGRITY_FAILURE",
+      code: "CANONICAL_EVENT_RECEIPT_MISMATCH",
+      retryable: false,
+    };
+    await expect(context.service.process()).resolves.toEqual({
+      state: "IDLE",
+    });
     await expect(context.service.reconcile()).resolves.toEqual([
       expect.objectContaining({ state: "SETTLED" }),
     ]);
