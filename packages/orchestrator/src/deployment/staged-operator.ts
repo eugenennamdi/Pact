@@ -278,6 +278,32 @@ export function assertControlledOperatorIdentity(
     throw new Error("OPERATOR_RESUME_IDENTITY_MISMATCH");
 }
 
+export function assertControlledResumeCanonicalStatus(
+  stage: ControlledOperatorStage,
+  snapshot: {
+    readonly jobStatus: number;
+    readonly bindingAccepted: boolean;
+    readonly verifierRevoked: boolean;
+    readonly blockTimestamp: bigint;
+  },
+  expiredAt: bigint,
+): void {
+  const completed =
+    snapshot.jobStatus === 3 && snapshot.bindingAccepted === true;
+  if (stage === "SETTLED") {
+    if (!completed) throw new Error("OPERATOR_SETTLED_STATE_MISMATCH");
+    return;
+  }
+
+  const submitted =
+    snapshot.jobStatus === 2 &&
+    snapshot.bindingAccepted === false &&
+    snapshot.verifierRevoked === false &&
+    snapshot.blockTimestamp < expiredAt;
+  if (submitted || (stage === "READY_TO_RELAY" && completed)) return;
+  throw new Error("OPERATOR_RESUME_NOT_SUBMITTED");
+}
+
 export function advanceControlledOperatorState(
   state: ControlledOperatorState,
   nextStage: ControlledOperatorStage,

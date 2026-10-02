@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   advanceControlledOperatorState,
   assertControlledOperatorIdentity,
+  assertControlledResumeCanonicalStatus,
   assertControlledOperatorState,
   FileControlledOperatorState,
   parseControlledOperatorAction,
@@ -87,6 +88,33 @@ describe("staged controlled operator state", () => {
         operationScope: "arc-mainnet-job-1-retry",
       }),
     ).toThrow("OPERATOR_RESUME_IDENTITY_MISMATCH");
+  });
+
+  it("allows READY_TO_RELAY to reconcile a completion observed after broadcast", () => {
+    expect(() =>
+      assertControlledResumeCanonicalStatus(
+        "READY_TO_RELAY",
+        {
+          jobStatus: 3,
+          bindingAccepted: true,
+          verifierRevoked: false,
+          blockTimestamp: 200n,
+        },
+        100n,
+      ),
+    ).not.toThrow();
+    expect(() =>
+      assertControlledResumeCanonicalStatus(
+        "AWAITING_CONDITION",
+        {
+          jobStatus: 3,
+          bindingAccepted: true,
+          verifierRevoked: false,
+          blockTimestamp: 200n,
+        },
+        100n,
+      ),
+    ).toThrow("OPERATOR_RESUME_NOT_SUBMITTED");
   });
 
   it("fails closed when a concurrent operator owns the external state", async () => {

@@ -60,6 +60,7 @@ import {
   FileControlledOperatorState,
   advanceControlledOperatorState,
   assertControlledOperatorIdentity,
+  assertControlledResumeCanonicalStatus,
   parseControlledOperatorAction,
   type ControlledOperatorState,
 } from "./staged-operator.js";
@@ -667,20 +668,11 @@ async function runControlledOperator(): Promise<void> {
     !canonicalBeforeResume.bindingExists
   )
     throw new Error("OPERATOR_RESUME_CANONICAL_STATE_MISMATCH");
-  if (state.stage === "SETTLED") {
-    if (
-      canonicalBeforeResume.jobStatus !== 3 ||
-      !canonicalBeforeResume.bindingAccepted
-    )
-      throw new Error("OPERATOR_SETTLED_STATE_MISMATCH");
-  } else if (
-    canonicalBeforeResume.jobStatus !== 2 ||
-    canonicalBeforeResume.bindingAccepted ||
-    canonicalBeforeResume.verifierRevoked ||
-    canonicalBeforeResume.blockTimestamp >= expiredAt
-  ) {
-    throw new Error("OPERATOR_RESUME_NOT_SUBMITTED");
-  }
+  assertControlledResumeCanonicalStatus(
+    state.stage,
+    canonicalBeforeResume,
+    expiredAt,
+  );
   if (state.stage === "AWAITING_CONDITION") {
     const verification = await observeCondition();
     if (verification.status === "NOT_SATISFIED") {
