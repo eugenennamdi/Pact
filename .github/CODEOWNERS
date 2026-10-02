@@ -1,0 +1,29 @@
+# Certified-kernel policy and enforcement
+/certified-kernel.json @eugenennamdi
+/scripts/lib/certified-kernel.mjs @eugenennamdi
+/scripts/verify-certified-kernel.mjs @eugenennamdi
+/scripts/test-certified-kernel.mjs @eugenennamdi
+/.github/workflows/certified-kernel.yml @eugenennamdi
+/.github/CODEOWNERS @eugenennamdi
+/package.json @eugenennamdi
+/package-lock.json @eugenennamdi
+
+# Canonical protocol and contracts
+/tsconfig.base.json @eugenennamdi
+/packages/protocol/ @eugenennamdi
+/packages/contracts/ @eugenennamdi
+
+# Verifier, orchestration, relay, persistence, and operator plane
+/packages/verifier/ @eugenennamdi
+/packages/orchestrator/ @eugenennamdi
+/packages/database/ @eugenennamdi
+/deployments/ @eugenennamdi
+
+# Security-sensitive web composition and existing internal operations
+/apps/web/next.config.ts @eugenennamdi
+/apps/web/tsconfig.json @eugenennamdi
+/apps/web/server/ @eugenennamdi
+/apps/web/app/api/github/webhook/ @eugenennamdi
+/apps/web/app/api/operations/ @eugenennamdi
+/apps/web/app/api/pacts/ @eugenennamdi
+/apps/web/app/api/relay/ @eugenennamdi
