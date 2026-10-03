@@ -7,6 +7,7 @@ import {
   handleAuthLogout,
   handleAuthSession,
   handleCreateDraft,
+  handlePrepareWalletAction,
   handleReadEvidence,
   handleReadPact,
   handleReadSettlement,
@@ -29,6 +30,7 @@ const config: ProductConfig = {
   sessionTtlSeconds: 900,
   chainId: 5_042_002,
   databaseUrl: "postgresql://local.invalid/pact",
+  arcRpcUrl: "https://rpc.testnet.arc.io",
 };
 
 const github: GitHubPullRequestClient = {
@@ -109,6 +111,53 @@ describe("product HTTP safety and auth", () => {
     );
     expect(response.status).toBe(400);
   });
+
+  it.each([
+    ["to", "0x3333333333333333333333333333333333333333"],
+    ["data", "0x1234"],
+    ["value", "1"],
+    ["budget", "999999"],
+    ["amount", ((1n << 256n) - 1n).toString()],
+  ])(
+    "rejects caller-controlled wallet transaction field %s",
+    async (key, value) => {
+      const repository = new InMemoryProductRepository();
+      const productRuntime = runtime(repository);
+      const created = await handleCreateDraft(
+        new Request(`${ORIGIN}/api/v1/pacts`, {
+          method: "POST",
+          headers: {
+            origin: ORIGIN,
+            "content-type": "application/json",
+            cookie: sessionCookie(),
+            "idempotency-key": "http-draft-key-01",
+          },
+          body: JSON.stringify({
+            repository: "eugenennamdi/pact-arc-demo",
+            pullRequest: 9,
+            provider: PROVIDER,
+            amount: "0.001",
+          }),
+        }),
+        productRuntime,
+      );
+      const body = (await created.json()) as { publicSlug: string };
+      const response = await handlePrepareWalletAction(
+        jsonRequest(
+          `/api/v1/pacts/${body.publicSlug}/actions/create-job/prepare`,
+          { [key]: value },
+          { cookie: sessionCookie() },
+        ),
+        productRuntime,
+        body.publicSlug,
+        "create-job",
+      );
+      expect(response.status).toBe(400);
+      await expect(response.json()).resolves.toEqual({
+        error: "INVALID_REQUEST",
+      });
+    },
+  );
 
   it("verifies a challenge and issues an HttpOnly session", async () => {
     const productRuntime = runtime();

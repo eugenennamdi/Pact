@@ -21,11 +21,15 @@ import type {
   AuthNonce,
   CreateDraftInput,
   CreateDraftResult,
+  ConfirmWalletActionInput,
   PactDraft,
+  PreparedWalletActionInput,
   ProductProjectionInput,
   ProductRepository,
   PublicSettlementSummary,
+  SavePreparedActionResult,
   WalletAction,
+  WalletActionKind,
 } from "./types";
 
 interface DraftRow {
@@ -75,10 +79,23 @@ interface WalletActionRow {
   readonly expected_target: string;
   readonly value: string;
   readonly calldata_hash: string;
+  readonly semantic_hash: string;
   readonly preparation_version: number;
+  readonly prepared_at_block: string;
+  readonly prepared_at_block_hash: string | null;
+  readonly preparation_expires_at: Date;
+  readonly expected_state_transition: string;
+  readonly completion_deadline: string | null;
+  readonly job_expired_at: string | null;
   readonly transaction_hash: string | null;
   readonly confirmation_status: WalletAction["confirmationStatus"];
   readonly idempotency_key: string;
+  readonly confirmed_job_id: string | null;
+  readonly confirmed_job_key: string | null;
+  readonly confirmed_job_status: number | null;
+  readonly confirmed_at_block: string | null;
+  readonly confirmed_at_block_hash: string | null;
+  readonly confirmed_at: Date | null;
   readonly created_at: Date;
   readonly updated_at: Date;
 }
@@ -152,10 +169,27 @@ function mapWalletAction(row: WalletActionRow): WalletAction {
     expectedTarget: getAddress(row.expected_target),
     value: BigInt(row.value),
     calldataHash: row.calldata_hash as Hex32,
+    semanticHash: row.semantic_hash as Hex32,
     preparationVersion: row.preparation_version,
+    preparedAtBlock: BigInt(row.prepared_at_block),
+    preparedAtBlockHash: row.prepared_at_block_hash as Hex32 | null,
+    preparationExpiresAt: row.preparation_expires_at,
+    expectedStateTransition: row.expected_state_transition,
+    completionDeadline:
+      row.completion_deadline === null ? null : BigInt(row.completion_deadline),
+    jobExpiredAt:
+      row.job_expired_at === null ? null : BigInt(row.job_expired_at),
     transactionHash: row.transaction_hash as Hex32 | null,
     confirmationStatus: row.confirmation_status,
     idempotencyKey: row.idempotency_key,
+    confirmedJobId:
+      row.confirmed_job_id === null ? null : BigInt(row.confirmed_job_id),
+    confirmedJobKey: row.confirmed_job_key as Hex32 | null,
+    confirmedJobStatus: row.confirmed_job_status,
+    confirmedAtBlock:
+      row.confirmed_at_block === null ? null : BigInt(row.confirmed_at_block),
+    confirmedAtBlockHash: row.confirmed_at_block_hash as Hex32 | null,
+    confirmedAt: row.confirmed_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   });
@@ -295,6 +329,177 @@ export class PostgresProductRepository implements ProductRepository {
     return rows[0] === undefined ? undefined : mapDraft(rows[0]);
   }
 
+  async getWalletAction(
+    draftId: string,
+    action: WalletActionKind,
+  ): Promise<WalletAction | undefined> {
+    const rows = await this.#database.sql<WalletActionRow[]>`
+      SELECT * FROM wallet_actions
+      WHERE draft_id = ${draftId} AND action = ${action}
+      LIMIT 1
+    `;
+    return rows[0] === undefined ? undefined : mapWalletAction(rows[0]);
+  }
+
+  async savePreparedAction(
+    input: PreparedWalletActionInput,
+  ): Promise<SavePreparedActionResult> {
+    return this.#database.sql.begin(async (transaction) => {
+      await transaction`SELECT pg_advisory_xact_lock(hashtext(${`${input.draftId}:${input.action}`}))`;
+      const existingRows = await transaction<WalletActionRow[]>`
+        SELECT * FROM wallet_actions
+        WHERE draft_id = ${input.draftId} AND action = ${input.action}
+        FOR UPDATE
+      `;
+      const existingRow = existingRows[0];
+      if (existingRow !== undefined) {
+        const existing = mapWalletAction(existingRow);
+        if (existing.confirmationStatus === "CONFIRMED") {
+          return { kind: "ALREADY_CONFIRMED" as const, action: existing };
+        }
+        if (
+          existing.idempotencyKey !== input.idempotencyKey ||
+          existing.semanticHash !== input.semanticHash
+        ) {
+          return { kind: "CONFLICT" as const, action: existing };
+        }
+        if (
+          existing.preparationExpiresAt > new Date() &&
+          existing.calldataHash === input.calldataHash &&
+          existing.requiredSigner === input.requiredSigner &&
+          existing.expectedTarget === input.expectedTarget &&
+          existing.value === input.value
+        ) {
+          return { kind: "REPLAY" as const, action: existing };
+        }
+        const refreshedRows = await transaction<WalletActionRow[]>`
+          UPDATE wallet_actions SET
+            pact_record_id = ${input.pactRecordId},
+            required_signer = ${input.requiredSigner},
+            chain_id = ${input.chainId.toString()},
+            expected_target = ${input.expectedTarget},
+            value = ${input.value.toString()},
+            calldata_hash = ${input.calldataHash},
+            semantic_hash = ${input.semanticHash},
+            preparation_version = ${input.preparationVersion},
+            prepared_at_block = ${input.preparedAtBlock.toString()},
+            prepared_at_block_hash = ${input.preparedAtBlockHash},
+            preparation_expires_at = ${input.preparationExpiresAt},
+            expected_state_transition = ${input.expectedStateTransition},
+            completion_deadline = ${input.completionDeadline?.toString() ?? null},
+            job_expired_at = ${input.jobExpiredAt?.toString() ?? null},
+            transaction_hash = NULL,
+            confirmation_status = 'PENDING',
+            updated_at = now()
+          WHERE id = ${existing.id}
+          RETURNING *
+        `;
+        const refreshed = refreshedRows[0];
+        if (refreshed === undefined)
+          throw new Error("WALLET_ACTION_REFRESH_FAILED");
+        return {
+          kind: "REFRESHED" as const,
+          action: mapWalletAction(refreshed),
+        };
+      }
+      const rows = await transaction<WalletActionRow[]>`
+        INSERT INTO wallet_actions (
+          id, draft_id, pact_record_id, action, required_signer, chain_id,
+          expected_target, value, calldata_hash, semantic_hash,
+          preparation_version, prepared_at_block, prepared_at_block_hash,
+          preparation_expires_at, expected_state_transition,
+          completion_deadline, job_expired_at, confirmation_status,
+          idempotency_key
+        ) VALUES (
+          ${crypto.randomUUID()}, ${input.draftId}, ${input.pactRecordId},
+          ${input.action}, ${input.requiredSigner}, ${input.chainId.toString()},
+          ${input.expectedTarget}, ${input.value.toString()},
+          ${input.calldataHash}, ${input.semanticHash},
+          ${input.preparationVersion}, ${input.preparedAtBlock.toString()},
+          ${input.preparedAtBlockHash}, ${input.preparationExpiresAt},
+          ${input.expectedStateTransition},
+          ${input.completionDeadline?.toString() ?? null},
+          ${input.jobExpiredAt?.toString() ?? null}, 'PENDING',
+          ${input.idempotencyKey}
+        ) RETURNING *
+      `;
+      const row = rows[0];
+      if (row === undefined) throw new Error("WALLET_ACTION_INSERT_FAILED");
+      return { kind: "CREATED" as const, action: mapWalletAction(row) };
+    });
+  }
+
+  async confirmWalletAction(
+    input: ConfirmWalletActionInput,
+  ): Promise<WalletAction> {
+    try {
+      return await this.#database.sql.begin(async (transaction) => {
+        const existingRows = await transaction<WalletActionRow[]>`
+        SELECT * FROM wallet_actions WHERE id = ${input.actionId} FOR UPDATE
+      `;
+        const existingRow = existingRows[0];
+        if (existingRow === undefined)
+          throw new Error("WALLET_ACTION_NOT_FOUND");
+        const existing = mapWalletAction(existingRow);
+        if (existing.confirmationStatus === "CONFIRMED") {
+          if (existing.transactionHash !== input.transactionHash)
+            throw new Error("TRANSACTION_CONFIRMATION_CONFLICT");
+          return existing;
+        }
+        const claimed =
+          input.transactionHash === null
+            ? []
+            : await transaction<{ readonly id: string }[]>`
+              SELECT id FROM wallet_actions
+              WHERE transaction_hash = ${input.transactionHash}
+                AND id <> ${input.actionId}
+              LIMIT 1
+            `;
+        if (claimed.length !== 0)
+          throw new Error("TRANSACTION_ALREADY_CLAIMED");
+        if (input.linkedPactRecordId !== undefined) {
+          const linked = await transaction<{ readonly id: string }[]>`
+          UPDATE pact_drafts SET
+            linked_pact_record_id = ${input.linkedPactRecordId},
+            lifecycle = 'LINKED', updated_at = now()
+          WHERE id = ${existing.draftId}
+            AND (linked_pact_record_id IS NULL
+              OR linked_pact_record_id = ${input.linkedPactRecordId})
+          RETURNING id
+        `;
+          if (linked.length !== 1) throw new Error("PACT_DRAFT_LINK_CONFLICT");
+        }
+        const rows = await transaction<WalletActionRow[]>`
+        UPDATE wallet_actions SET
+          pact_record_id = ${input.linkedPactRecordId ?? existing.pactRecordId},
+          transaction_hash = ${input.transactionHash},
+          confirmation_status = 'CONFIRMED',
+          confirmed_job_id = ${input.confirmedJobId?.toString() ?? null},
+          confirmed_job_key = ${input.confirmedJobKey},
+          confirmed_job_status = ${input.confirmedJobStatus},
+          confirmed_at_block = ${input.confirmedAtBlock.toString()},
+          confirmed_at_block_hash = ${input.confirmedAtBlockHash},
+          confirmed_at = ${input.confirmedAt}, updated_at = now()
+        WHERE id = ${input.actionId} AND confirmation_status <> 'CONFIRMED'
+        RETURNING *
+      `;
+        const row = rows[0];
+        if (row === undefined) throw new Error("WALLET_ACTION_CONFIRM_FAILED");
+        return mapWalletAction(row);
+      });
+    } catch (error) {
+      if (
+        typeof error === "object" &&
+        error !== null &&
+        "constraint_name" in error &&
+        error.constraint_name === "wallet_actions_transaction_hash_uq"
+      ) {
+        throw new Error("TRANSACTION_ALREADY_CLAIMED");
+      }
+      throw error;
+    }
+  }
+
   async getPublicProjection(
     slug: string,
   ): Promise<ProductProjectionInput | undefined> {
@@ -306,18 +511,24 @@ export class PostgresProductRepository implements ProductRepository {
       ORDER BY created_at ASC, id ASC
     `;
     const walletActions = actionRows.map(mapWalletAction);
+    const latestConfirmedAction = [...walletActions]
+      .reverse()
+      .find((action) => action.confirmationStatus === "CONFIRMED");
+    const createAction = walletActions.find(
+      (action) => action.action === "CREATE_JOB",
+    );
     if (draft.linkedPactRecordId === null) {
       return {
         draft,
         walletActions,
         operationState: null,
         relayState: null,
-        chainJobStatus: null,
-        chainExpiredAt: null,
+        chainJobStatus: latestConfirmedAction?.confirmedJobStatus ?? null,
+        chainExpiredAt: createAction?.jobExpiredAt ?? null,
         now: BigInt(Math.floor(Date.now() / 1000)),
-        jobId: null,
-        jobKey: null,
-        completionDeadline: null,
+        jobId: createAction?.confirmedJobId ?? null,
+        jobKey: createAction?.confirmedJobKey ?? null,
+        completionDeadline: createAction?.completionDeadline ?? null,
         evidence: null,
         settlement: null,
       };
@@ -403,9 +614,14 @@ export class PostgresProductRepository implements ProductRepository {
       walletActions,
       operationState: row.operation_state,
       relayState: row.relay_state,
-      chainJobStatus: row.chain_job_status,
+      chainJobStatus:
+        row.chain_job_status ??
+        latestConfirmedAction?.confirmedJobStatus ??
+        null,
       chainExpiredAt:
-        row.chain_expired_at === null ? null : BigInt(row.chain_expired_at),
+        row.chain_expired_at === null
+          ? (createAction?.jobExpiredAt ?? null)
+          : BigInt(row.chain_expired_at),
       now: BigInt(Math.floor(Date.now() / 1000)),
       jobId: BigInt(row.job_id),
       jobKey: row.job_key,
@@ -420,6 +636,7 @@ export class InMemoryProductRepository implements ProductRepository {
   readonly #nonces = new Map<string, AuthNonce>();
   readonly #drafts = new Map<string, PactDraft>();
   readonly #idempotency = new Map<string, string>();
+  readonly #actions = new Map<string, WalletAction>();
 
   async issueNonce(
     input: Omit<AuthNonce, "id" | "consumedAt">,
@@ -517,6 +734,120 @@ export class InMemoryProductRepository implements ProductRepository {
     return this.#drafts.get(slug);
   }
 
+  async getWalletAction(
+    draftId: string,
+    action: WalletActionKind,
+  ): Promise<WalletAction | undefined> {
+    return this.#actions.get(`${draftId}:${action}`);
+  }
+
+  async savePreparedAction(
+    input: PreparedWalletActionInput,
+  ): Promise<SavePreparedActionResult> {
+    const key = `${input.draftId}:${input.action}`;
+    const existing = this.#actions.get(key);
+    if (existing !== undefined) {
+      if (existing.confirmationStatus === "CONFIRMED")
+        return { kind: "ALREADY_CONFIRMED", action: existing };
+      if (
+        existing.idempotencyKey !== input.idempotencyKey ||
+        existing.semanticHash !== input.semanticHash
+      ) {
+        return { kind: "CONFLICT", action: existing };
+      }
+      if (
+        existing.preparationExpiresAt > new Date() &&
+        existing.calldataHash === input.calldataHash
+      ) {
+        return { kind: "REPLAY", action: existing };
+      }
+      const refreshed = Object.freeze({
+        ...existing,
+        ...input,
+        transactionHash: null,
+        confirmationStatus: "PENDING" as const,
+        updatedAt: new Date(),
+      });
+      this.#actions.set(key, refreshed);
+      return { kind: "REFRESHED", action: refreshed };
+    }
+    const now = new Date();
+    const created: WalletAction = Object.freeze({
+      ...input,
+      id: crypto.randomUUID(),
+      transactionHash: null,
+      confirmationStatus: "PENDING",
+      confirmedJobId: null,
+      confirmedJobKey: null,
+      confirmedJobStatus: null,
+      confirmedAtBlock: null,
+      confirmedAtBlockHash: null,
+      confirmedAt: null,
+      createdAt: now,
+      updatedAt: now,
+    });
+    this.#actions.set(key, created);
+    return { kind: "CREATED", action: created };
+  }
+
+  async confirmWalletAction(
+    input: ConfirmWalletActionInput,
+  ): Promise<WalletAction> {
+    const entry = [...this.#actions.entries()].find(
+      ([, action]) => action.id === input.actionId,
+    );
+    if (entry === undefined) throw new Error("WALLET_ACTION_NOT_FOUND");
+    const [key, existing] = entry;
+    if (existing.confirmationStatus === "CONFIRMED") {
+      if (existing.transactionHash !== input.transactionHash)
+        throw new Error("TRANSACTION_CONFIRMATION_CONFLICT");
+      return existing;
+    }
+    if (
+      input.transactionHash !== null &&
+      [...this.#actions.values()].some(
+        (action) =>
+          action.id !== input.actionId &&
+          action.transactionHash === input.transactionHash,
+      )
+    ) {
+      throw new Error("TRANSACTION_ALREADY_CLAIMED");
+    }
+    const confirmed = Object.freeze({
+      ...existing,
+      pactRecordId: input.linkedPactRecordId ?? existing.pactRecordId,
+      transactionHash: input.transactionHash,
+      confirmationStatus: "CONFIRMED" as const,
+      confirmedJobId: input.confirmedJobId,
+      confirmedJobKey: input.confirmedJobKey,
+      confirmedJobStatus: input.confirmedJobStatus,
+      confirmedAtBlock: input.confirmedAtBlock,
+      confirmedAtBlockHash: input.confirmedAtBlockHash,
+      confirmedAt: input.confirmedAt,
+      updatedAt: input.confirmedAt,
+    });
+    this.#actions.set(key, confirmed);
+    if (input.linkedPactRecordId !== undefined) {
+      const draft = this.#drafts.get(
+        [...this.#drafts.keys()].find(
+          (slug) => this.#drafts.get(slug)?.id === existing.draftId,
+        ) ?? "",
+      );
+      if (draft !== undefined) {
+        this.#drafts.set(
+          draft.publicSlug,
+          Object.freeze({
+            ...draft,
+            linkedPactRecordId: input.linkedPactRecordId,
+            lifecycle: "LINKED" as const,
+            updatedAt: input.confirmedAt,
+          }),
+        );
+      }
+    }
+    return confirmed;
+  }
+
   async getPublicProjection(
     slug: string,
   ): Promise<ProductProjectionInput | undefined> {
@@ -524,15 +855,36 @@ export class InMemoryProductRepository implements ProductRepository {
     if (draft === undefined) return undefined;
     return {
       draft,
-      walletActions: [],
+      walletActions: [...this.#actions.values()]
+        .filter((action) => action.draftId === draft.id)
+        .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime()),
       operationState: null,
       relayState: null,
-      chainJobStatus: null,
-      chainExpiredAt: null,
+      chainJobStatus:
+        [...this.#actions.values()]
+          .filter((action) => action.draftId === draft.id)
+          .at(-1)?.confirmedJobStatus ?? null,
+      chainExpiredAt:
+        [...this.#actions.values()].find(
+          (action) =>
+            action.draftId === draft.id && action.action === "CREATE_JOB",
+        )?.jobExpiredAt ?? null,
       now: BigInt(Math.floor(Date.now() / 1000)),
-      jobId: null,
-      jobKey: null,
-      completionDeadline: null,
+      jobId:
+        [...this.#actions.values()].find(
+          (action) =>
+            action.draftId === draft.id && action.action === "CREATE_JOB",
+        )?.confirmedJobId ?? null,
+      jobKey:
+        [...this.#actions.values()].find(
+          (action) =>
+            action.draftId === draft.id && action.action === "CREATE_JOB",
+        )?.confirmedJobKey ?? null,
+      completionDeadline:
+        [...this.#actions.values()].find(
+          (action) =>
+            action.draftId === draft.id && action.action === "CREATE_JOB",
+        )?.completionDeadline ?? null,
       evidence: null,
       settlement: null,
     };

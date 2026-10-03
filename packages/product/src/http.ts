@@ -6,6 +6,7 @@ import {
   type RecoverMessageAddress,
 } from "./auth";
 import type { ProductConfig } from "./config";
+import type { CanonicalPactRegistrar } from "./canonical-link";
 import type { RateLimiter, RateLimitScope } from "./rate-limit";
 import {
   clearSessionCookie,
@@ -23,6 +24,8 @@ import {
   type CreateDraftRequest,
 } from "./service";
 import type { ProductRepository } from "./types";
+import type { ProductChainClient } from "./wallet-chain";
+import { confirmWalletAction, prepareWalletAction } from "./wallet-lifecycle";
 
 const BODY_LIMIT_BYTES = 4_096;
 
@@ -32,6 +35,8 @@ export interface ProductRuntime {
   readonly github: GitHubPullRequestClient;
   readonly rateLimiter: RateLimiter;
   readonly recoverAddress?: RecoverMessageAddress;
+  readonly chain?: ProductChainClient;
+  readonly registrar?: CanonicalPactRegistrar;
 }
 
 function json(data: unknown, status = 200, headers?: HeadersInit): Response {
@@ -68,11 +73,22 @@ function errorResponse(error: unknown): Response {
       BODY_TOO_LARGE: 413,
       MALFORMED_JSON: 400,
       INVALID_REQUEST: 400,
+      TRANSACTION_ALREADY_CLAIMED: 409,
+      TRANSACTION_CONFIRMATION_CONFLICT: 409,
     };
     const status = known[error.message];
     if (status !== undefined) return json({ error: error.message }, status);
   }
   return json({ error: "INTERNAL_ERROR" }, 500);
+}
+
+function requireWalletRuntime(runtime: ProductRuntime): {
+  readonly chain: ProductChainClient;
+  readonly registrar: CanonicalPactRegistrar;
+} {
+  if (runtime.chain === undefined || runtime.registrar === undefined)
+    throw new Error("WALLET_RUNTIME_UNAVAILABLE");
+  return { chain: runtime.chain, registrar: runtime.registrar };
 }
 
 function remoteKey(request: Request): string {
@@ -316,6 +332,81 @@ export async function handleReadSettlement(
   try {
     return json(
       await readPublicSettlement({ repository: runtime.repository, slug }),
+    );
+  } catch (error) {
+    return errorResponse(error);
+  }
+}
+
+export async function handlePrepareWalletAction(
+  request: Request,
+  runtime: ProductRuntime,
+  slug: string,
+  action: string,
+): Promise<Response> {
+  try {
+    requireOrigin(request, runtime.config);
+    const session = requireSession(request, runtime.config);
+    const limited = applyRateLimit(
+      runtime,
+      request,
+      "WALLET_ACTION",
+      `${session.walletAddress}:${slug}:${action}:prepare`,
+    );
+    if (limited !== undefined) return limited;
+    await parseStrictJson(request, []);
+    const walletRuntime = requireWalletRuntime(runtime);
+    const result = await prepareWalletAction({
+      runtime: {
+        repository: runtime.repository,
+        github: runtime.github,
+        chain: walletRuntime.chain,
+        registrar: walletRuntime.registrar,
+      },
+      slug,
+      actionPath: action,
+      sessionWallet: session.walletAddress,
+      idempotencyKey: request.headers.get("idempotency-key"),
+    });
+    return json(result, result.result === "PREPARED" ? 201 : 200);
+  } catch (error) {
+    return errorResponse(error);
+  }
+}
+
+export async function handleConfirmWalletAction(
+  request: Request,
+  runtime: ProductRuntime,
+  slug: string,
+  action: string,
+): Promise<Response> {
+  try {
+    requireOrigin(request, runtime.config);
+    const session = requireSession(request, runtime.config);
+    const limited = applyRateLimit(
+      runtime,
+      request,
+      "WALLET_ACTION",
+      `${session.walletAddress}:${slug}:${action}:confirm`,
+    );
+    if (limited !== undefined) return limited;
+    const body = await parseStrictJson(request, ["transactionHash"]);
+    if (typeof body.transactionHash !== "string")
+      throw new Error("INVALID_REQUEST");
+    const walletRuntime = requireWalletRuntime(runtime);
+    return json(
+      await confirmWalletAction({
+        runtime: {
+          repository: runtime.repository,
+          github: runtime.github,
+          chain: walletRuntime.chain,
+          registrar: walletRuntime.registrar,
+        },
+        slug,
+        actionPath: action,
+        sessionWallet: session.walletAddress,
+        transactionHash: body.transactionHash,
+      }),
     );
   } catch (error) {
     return errorResponse(error);

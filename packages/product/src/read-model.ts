@@ -34,11 +34,16 @@ export interface PublicPactDto {
   readonly expiry: string | null;
   readonly status: PublicPactStatus;
   readonly next: NextAction;
+  readonly nextRequiredActor: NextAction["actor"];
+  readonly nextRequiredAction: NextAction["action"];
+  readonly canonicalJobStatus: number | null;
   readonly walletActions: readonly {
     readonly action: WalletActionKind;
     readonly requiredSigner: Address;
     readonly confirmationStatus: string;
     readonly transactionHash: string | null;
+    readonly preparedAtBlock: string;
+    readonly preparationExpiresAt: string;
   }[];
   readonly evidence: {
     readonly evidenceHash: string;
@@ -166,8 +171,39 @@ export function nextAction(status: PublicPactStatus): NextAction {
   }
 }
 
+function projectedNextAction(
+  input: ProductProjectionInput,
+  status: PublicPactStatus,
+): NextAction {
+  if (status === "ACTION_REQUIRED" || status === "DRAFT") {
+    const confirmed = new Set(
+      input.walletActions
+        .filter((action) => action.confirmationStatus === "CONFIRMED")
+        .map((action) => action.action),
+    );
+    const sequence: readonly NextAction[] = [
+      { actor: "CLIENT", action: "CREATE_JOB" },
+      { actor: "CLIENT", action: "BIND_CONDITION" },
+      { actor: "PROVIDER", action: "SET_BUDGET" },
+      { actor: "CLIENT", action: "APPROVE_USDC" },
+      { actor: "CLIENT", action: "FUND" },
+    ];
+    return (
+      sequence.find(
+        (candidate) =>
+          candidate.action !== "NONE" &&
+          candidate.action !== "VERIFY" &&
+          candidate.action !== "SETTLE" &&
+          !confirmed.has(candidate.action),
+      ) ?? { actor: "PROVIDER", action: "SUBMIT" }
+    );
+  }
+  return nextAction(status);
+}
+
 export function toPublicPactDto(input: ProductProjectionInput): PublicPactDto {
   const status = projectPublicStatus(input);
+  const next = projectedNextAction(input, status);
   return Object.freeze({
     slug: input.draft.publicSlug,
     network: input.draft.network,
@@ -187,12 +223,17 @@ export function toPublicPactDto(input: ProductProjectionInput): PublicPactDto {
     completionDeadline: input.completionDeadline?.toString() ?? null,
     expiry: input.chainExpiredAt?.toString() ?? null,
     status,
-    next: nextAction(status),
+    next,
+    nextRequiredActor: next.actor,
+    nextRequiredAction: next.action,
+    canonicalJobStatus: input.chainJobStatus,
     walletActions: input.walletActions.map((action) => ({
       action: action.action,
       requiredSigner: action.requiredSigner,
       confirmationStatus: action.confirmationStatus,
       transactionHash: action.transactionHash,
+      preparedAtBlock: action.preparedAtBlock.toString(),
+      preparationExpiresAt: action.preparationExpiresAt.toISOString(),
     })),
     evidence:
       input.evidence === null

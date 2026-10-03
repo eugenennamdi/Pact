@@ -75,12 +75,29 @@ export const walletActions = pgTable(
     expectedTarget: varchar("expected_target", { length: 42 }).notNull(),
     value: varchar("value", { length: 78 }).notNull(),
     calldataHash: varchar("calldata_hash", { length: 66 }).notNull(),
+    semanticHash: varchar("semantic_hash", { length: 66 }).notNull(),
     preparationVersion: integer("preparation_version").notNull(),
+    preparedAtBlock: varchar("prepared_at_block", { length: 78 }).notNull(),
+    preparedAtBlockHash: varchar("prepared_at_block_hash", { length: 66 }),
+    preparationExpiresAt: timestamp("preparation_expires_at", {
+      withTimezone: true,
+    }).notNull(),
+    expectedStateTransition: varchar("expected_state_transition", {
+      length: 64,
+    }).notNull(),
+    completionDeadline: varchar("completion_deadline", { length: 78 }),
+    jobExpiredAt: varchar("job_expired_at", { length: 78 }),
     transactionHash: varchar("transaction_hash", { length: 66 }),
     confirmationStatus: varchar("confirmation_status", {
       length: 24,
     }).notNull(),
     idempotencyKey: varchar("idempotency_key", { length: 128 }).notNull(),
+    confirmedJobId: varchar("confirmed_job_id", { length: 78 }),
+    confirmedJobKey: varchar("confirmed_job_key", { length: 66 }),
+    confirmedJobStatus: integer("confirmed_job_status"),
+    confirmedAtBlock: varchar("confirmed_at_block", { length: 78 }),
+    confirmedAtBlockHash: varchar("confirmed_at_block_hash", { length: 66 }),
+    confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -94,6 +111,16 @@ export const walletActions = pgTable(
       table.idempotencyKey,
     ),
     index("wallet_actions_draft_idx").on(table.draftId, table.createdAt),
+    uniqueIndex("wallet_actions_draft_action_uq").on(
+      table.draftId,
+      table.action,
+    ),
+    uniqueIndex("wallet_actions_transaction_hash_uq")
+      .on(table.transactionHash)
+      .where(sql`${table.transactionHash} is not null`),
+    index("wallet_actions_expiry_idx")
+      .on(table.preparationExpiresAt)
+      .where(sql`${table.confirmationStatus} = 'PENDING'`),
     check(
       "wallet_actions_kind_valid",
       sql`${table.action} in ('CREATE_JOB','BIND_CONDITION','SET_BUDGET','APPROVE_USDC','FUND','SUBMIT')`,

@@ -1,5 +1,9 @@
 export type RateLimitScope =
-  "AUTH_CHALLENGE" | "AUTH_SESSION" | "DRAFT_CREATE" | "PUBLIC_READ";
+  | "AUTH_CHALLENGE"
+  | "AUTH_SESSION"
+  | "DRAFT_CREATE"
+  | "WALLET_ACTION"
+  | "PUBLIC_READ";
 
 export interface RateLimitDecision {
   readonly allowed: boolean;
@@ -16,6 +20,7 @@ const POLICY: Readonly<
   AUTH_CHALLENGE: { limit: 10, windowSeconds: 60 },
   AUTH_SESSION: { limit: 20, windowSeconds: 60 },
   DRAFT_CREATE: { limit: 10, windowSeconds: 60 },
+  WALLET_ACTION: { limit: 30, windowSeconds: 60 },
   PUBLIC_READ: { limit: 120, windowSeconds: 60 },
 };
 

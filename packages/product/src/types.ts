@@ -73,10 +73,23 @@ export interface WalletAction {
   readonly expectedTarget: Address;
   readonly value: bigint;
   readonly calldataHash: Hex32;
+  readonly semanticHash: Hex32;
   readonly preparationVersion: number;
+  readonly preparedAtBlock: bigint;
+  readonly preparedAtBlockHash: Hex32 | null;
+  readonly preparationExpiresAt: Date;
+  readonly expectedStateTransition: string;
+  readonly completionDeadline: bigint | null;
+  readonly jobExpiredAt: bigint | null;
   readonly transactionHash: Hex32 | null;
   readonly confirmationStatus: WalletConfirmationStatus;
   readonly idempotencyKey: string;
+  readonly confirmedJobId: bigint | null;
+  readonly confirmedJobKey: Hex32 | null;
+  readonly confirmedJobStatus: number | null;
+  readonly confirmedAtBlock: bigint | null;
+  readonly confirmedAtBlockHash: Hex32 | null;
+  readonly confirmedAt: Date | null;
   readonly createdAt: Date;
   readonly updatedAt: Date;
 }
@@ -120,9 +133,59 @@ export interface ProductRepository {
   ): Promise<PactDraft | undefined>;
   createDraft(input: CreateDraftInput): Promise<CreateDraftResult>;
   getDraftBySlug(slug: string): Promise<PactDraft | undefined>;
+  getWalletAction(
+    draftId: string,
+    action: WalletActionKind,
+  ): Promise<WalletAction | undefined>;
+  savePreparedAction(
+    input: PreparedWalletActionInput,
+  ): Promise<SavePreparedActionResult>;
+  confirmWalletAction(input: ConfirmWalletActionInput): Promise<WalletAction>;
   getPublicProjection(
     slug: string,
   ): Promise<ProductProjectionInput | undefined>;
+}
+
+export interface PreparedWalletActionInput {
+  readonly draftId: string;
+  readonly pactRecordId: string | null;
+  readonly action: WalletActionKind;
+  readonly requiredSigner: Address;
+  readonly chainId: bigint;
+  readonly expectedTarget: Address;
+  readonly value: bigint;
+  readonly calldataHash: Hex32;
+  readonly semanticHash: Hex32;
+  readonly preparationVersion: number;
+  readonly preparedAtBlock: bigint;
+  readonly preparedAtBlockHash: Hex32 | null;
+  readonly preparationExpiresAt: Date;
+  readonly expectedStateTransition: string;
+  readonly completionDeadline: bigint | null;
+  readonly jobExpiredAt: bigint | null;
+  readonly idempotencyKey: string;
+}
+
+export type SavePreparedActionResult =
+  | {
+      readonly kind: "CREATED" | "REPLAY" | "REFRESHED";
+      readonly action: WalletAction;
+    }
+  | {
+      readonly kind: "CONFLICT" | "ALREADY_CONFIRMED";
+      readonly action: WalletAction;
+    };
+
+export interface ConfirmWalletActionInput {
+  readonly actionId: string;
+  readonly transactionHash: Hex32 | null;
+  readonly confirmedJobId: bigint | null;
+  readonly confirmedJobKey: Hex32 | null;
+  readonly confirmedJobStatus: number | null;
+  readonly confirmedAtBlock: bigint;
+  readonly confirmedAtBlockHash: Hex32;
+  readonly confirmedAt: Date;
+  readonly linkedPactRecordId?: string;
 }
 
 export interface ProductProjectionInput {

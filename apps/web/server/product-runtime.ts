@@ -3,6 +3,8 @@ import { createGitHubPullRequestClient } from "@pact/verifier/github";
 import {
   InMemoryRateLimiter,
   PostgresProductRepository,
+  ProductCanonicalPactRegistrar,
+  createProductChainClient,
   loadProductConfig,
   type ProductRuntime,
 } from "../../../packages/product/src/index";
@@ -15,6 +17,8 @@ export {
   handleReadEvidence,
   handleReadPact,
   handleReadSettlement,
+  handlePrepareWalletAction,
+  handleConfirmWalletAction,
 } from "../../../packages/product/src/http";
 
 let runtime: ProductRuntime | undefined;
@@ -31,6 +35,8 @@ export function getProductRuntime(): ProductRuntime {
       config.githubToken === undefined ? {} : { token: config.githubToken },
     ),
     rateLimiter: new InMemoryRateLimiter(),
+    chain: createProductChainClient({ rpcUrl: config.arcRpcUrl }),
+    registrar: new ProductCanonicalPactRegistrar(database),
   });
   return runtime;
 }
