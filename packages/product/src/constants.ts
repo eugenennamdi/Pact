@@ -10,6 +10,7 @@ export const PRODUCT_COMPLETION_OFFSET_SECONDS = 7_200;
 export const PRODUCT_EXPIRY_POLICY_VERSION = 1;
 export const PRODUCT_EXPIRY_OFFSET_SECONDS = 21_600;
 export const PRODUCT_PREPARATION_VERSION = 1;
+export const PRODUCT_PREPARATION_TTL_SECONDS = 300;
 export const AUTH_NONCE_TTL_SECONDS = 300;
 export const SESSION_TTL_SECONDS = 900;
 export const SESSION_VERSION = 1;
@@ -22,3 +23,6 @@ if (BigInt(arcTestnetManifest.chainId) !== PRODUCT_CHAIN_ID) {
 export const PRODUCT_COMMERCE_ADDRESS = arcTestnetManifest.erc8183.proxy;
 export const PRODUCT_EVALUATOR_ADDRESS =
   arcTestnetManifest.pactEvaluator.address;
+export const PRODUCT_USDC_ADDRESS = arcTestnetManifest.usdc.address;
+export const PRODUCT_VERIFIER_ADDRESS =
+  arcTestnetManifest.pactEvaluator.verifier;

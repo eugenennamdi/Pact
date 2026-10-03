@@ -8,6 +8,7 @@ export interface ProductConfig {
   readonly sessionTtlSeconds: number;
   readonly chainId: typeof PRODUCT_CHAIN_ID_NUMBER;
   readonly databaseUrl: string;
+  readonly arcRpcUrl: string;
   readonly githubToken?: string;
 }
 
@@ -62,6 +63,10 @@ export function loadProductConfig(
     requireString(environment, "PACT_SESSION_SECRET"),
   );
   const databaseUrl = requireString(environment, "DATABASE_URL");
+  const arcRpcUrl = requireString(environment, "PACT_PRODUCT_ARC_RPC_URL");
+  const parsedRpcUrl = new URL(arcRpcUrl);
+  if (parsedRpcUrl.protocol !== "https:" && parsedRpcUrl.protocol !== "http:")
+    throw new Error("PACT_PRODUCT_ARC_RPC_URL must use HTTP or HTTPS");
   const githubToken = environment.GITHUB_TOKEN;
   if (githubToken !== undefined && githubToken.trim() !== githubToken) {
     throw new Error("GITHUB_TOKEN must not contain surrounding whitespace");
@@ -73,6 +78,7 @@ export function loadProductConfig(
     sessionTtlSeconds: SESSION_TTL_SECONDS,
     chainId: PRODUCT_CHAIN_ID_NUMBER,
     databaseUrl,
+    arcRpcUrl,
     ...(githubToken === undefined || githubToken.length === 0
       ? {}
       : { githubToken }),

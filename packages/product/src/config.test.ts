@@ -16,6 +16,7 @@ describe("product configuration and authorization", () => {
       PACT_PUBLIC_ORIGIN: "https://pact.example",
       PACT_SESSION_SECRET: "k".repeat(64),
       DATABASE_URL: "postgresql://local.invalid/pact",
+      PACT_PRODUCT_ARC_RPC_URL: "https://rpc.testnet.arc.io",
       NODE_ENV: "production",
     });
     expect(config.publicOrigin.origin).toBe("https://pact.example");
@@ -37,6 +38,7 @@ describe("product configuration and authorization", () => {
         PACT_PUBLIC_ORIGIN: "http://pact.example",
         PACT_SESSION_SECRET: "k".repeat(64),
         DATABASE_URL: "postgresql://local.invalid/pact",
+        PACT_PRODUCT_ARC_RPC_URL: "https://rpc.testnet.arc.io",
       }),
     ).toThrow("HTTPS");
   });

@@ -52,6 +52,11 @@ async function applyProductMigration(database: Sql): Promise<void> {
       new URL("../drizzle/0002_product_foundation.sql", import.meta.url),
     ),
   );
+  await database.unsafe(
+    await migration(
+      new URL("../drizzle/0003_wallet_lifecycle.sql", import.meta.url),
+    ),
+  );
 }
 
 describeMigration("product forward migration", () => {
@@ -197,11 +202,15 @@ describeMigration("product forward migration", () => {
     await existingDatabase`
       INSERT INTO wallet_actions (
         id, draft_id, action, required_signer, chain_id, expected_target,
-        value, calldata_hash, preparation_version, confirmation_status,
-        idempotency_key
+        value, calldata_hash, semantic_hash, preparation_version,
+        prepared_at_block, prepared_at_block_hash, preparation_expires_at,
+        expected_state_transition, confirmation_status, idempotency_key,
+        confirmed_at
       ) VALUES (
         ${crypto.randomUUID()}, ${draftId}, 'CREATE_JOB', ${wallet}, '5042002',
-        ${target}, '0', ${hash}, 1, 'CONFIRMED', 'action-key-0001'
+        ${target}, '0', ${hash}, ${hash}, 1, '1', ${hash},
+        now() + interval '5 minutes', 'DRAFT_TO_OPEN_JOB', 'CONFIRMED',
+        'action-key-0001', now()
       )
     `;
     await expect(
@@ -209,5 +218,55 @@ describeMigration("product forward migration", () => {
         UPDATE pact_drafts SET amount_base_units = '200000' WHERE id = ${draftId}
       `,
     ).rejects.toMatchObject({ code: "23514" });
+  });
+
+  it("enforces one prepared action per draft and globally unique transaction claims", async () => {
+    if (existingDatabase === undefined)
+      throw new Error("test database unavailable");
+    const wallet = "0x1111111111111111111111111111111111111111";
+    const provider = "0x2222222222222222222222222222222222222222";
+    const target = "0x3333333333333333333333333333333333333333";
+    const hash = `0x${"ef".repeat(32)}`;
+    const txHash = `0x${"12".repeat(32)}`;
+    const draftId = crypto.randomUUID();
+    await existingDatabase`
+      INSERT INTO pact_drafts (
+        id, public_slug, creating_wallet, provider_address,
+        github_repository, github_pull_request, base_branch, event,
+        amount_base_units, network, chain_id, condition_hash,
+        completion_policy_version, completion_offset_seconds,
+        expiry_policy_version, expiry_offset_seconds, idempotency_key,
+        canonical_request_hash, lifecycle
+      ) VALUES (
+        ${draftId}, ${`pact_${"c".repeat(32)}`}, ${wallet}, ${provider},
+        'example/repo', 8, 'main', 'PR_MERGED', '1000',
+        'arc-testnet', '5042002', ${hash}, 1, 7200, 1, 21600,
+        'migration-key-0003', ${hash}, 'ACTION_REQUIRED'
+      )
+    `;
+    const insert = (
+      id: string,
+      idempotencyKey: string,
+      transactionHash: string | null,
+    ) =>
+      existingDatabase`
+        INSERT INTO wallet_actions (
+          id, draft_id, action, required_signer, chain_id, expected_target,
+          value, calldata_hash, semantic_hash, preparation_version,
+          prepared_at_block, prepared_at_block_hash, preparation_expires_at,
+          expected_state_transition, transaction_hash, confirmation_status,
+          idempotency_key, confirmed_at
+        ) VALUES (
+          ${id}, ${draftId}, 'CREATE_JOB', ${wallet}, '5042002', ${target},
+          '0', ${hash}, ${hash}, 1, '1', ${hash}, now() + interval '5 minutes',
+          'DRAFT_TO_OPEN_JOB', ${transactionHash},
+          ${transactionHash === null ? "PENDING" : "CONFIRMED"},
+          ${idempotencyKey}, ${transactionHash === null ? null : new Date()}
+        )
+      `;
+    await insert(crypto.randomUUID(), "wallet-action-key-01", txHash);
+    await expect(
+      insert(crypto.randomUUID(), "wallet-action-key-02", null),
+    ).rejects.toMatchObject({ code: "23505" });
   });
 });

@@ -1,4 +1,5 @@
 export * from "./auth";
+export * from "./canonical-link";
 export * from "./config";
 export * from "./constants";
 export * from "./http";
@@ -7,4 +8,6 @@ export * from "./read-model";
 export * from "./repository";
 export * from "./service";
 export * from "./session";
+export * from "./wallet-chain";
+export * from "./wallet-lifecycle";
 export type * from "./types";
