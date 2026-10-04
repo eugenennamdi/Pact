@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
   bigint,
+  boolean,
   check,
   index,
   integer,
@@ -154,6 +155,53 @@ export const authNonces = pgTable(
     check(
       "auth_nonces_expiry_valid",
       sql`${table.expiresAt} > ${table.issuedAt}`,
+    ),
+  ],
+);
+
+export const pactAutomation = pgTable(
+  "pact_automation",
+  {
+    id: uuid("id").primaryKey(),
+    draftId: uuid("draft_id").notNull(),
+    pactRecordId: uuid("pact_record_id").notNull(),
+    enabled: boolean("enabled").default(true).notNull(),
+    nextCheckAt: timestamp("next_check_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    lastCheckAt: timestamp("last_check_at", { withTimezone: true }),
+    lastResult: varchar("last_result", { length: 96 }),
+    consecutiveRetryableFailures: integer("consecutive_retryable_failures")
+      .default(0)
+      .notNull(),
+    leaseOwner: varchar("lease_owner", { length: 128 }),
+    leaseToken: uuid("lease_token"),
+    leaseUntil: timestamp("lease_until", { withTimezone: true }),
+    lastOperationId: uuid("last_operation_id"),
+    lastWakeKey: varchar("last_wake_key", { length: 128 }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("pact_automation_draft_uq").on(table.draftId),
+    uniqueIndex("pact_automation_pact_record_uq").on(table.pactRecordId),
+    index("pact_automation_due_idx")
+      .on(table.nextCheckAt)
+      .where(sql`${table.enabled} = true`),
+    index("pact_automation_lease_idx")
+      .on(table.leaseUntil)
+      .where(sql`${table.leaseUntil} is not null`),
+    check(
+      "pact_automation_failures_nonnegative",
+      sql`${table.consecutiveRetryableFailures} >= 0`,
+    ),
+    check(
+      "pact_automation_lease_complete",
+      sql`((${table.leaseOwner} is null and ${table.leaseToken} is null and ${table.leaseUntil} is null) or (${table.leaseOwner} is not null and ${table.leaseToken} is not null and ${table.leaseUntil} is not null))`,
     ),
   ],
 );

@@ -1,0 +1,17 @@
+{
+  "name": "@pact/worker-relay",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/main.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@pact/automation": "0.0.0",
+    "@pact/database": "0.0.0",
+    "@pact/orchestrator": "0.0.0",
+    "viem": "2.56.9"
+  }
+}

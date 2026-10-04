@@ -3,6 +3,7 @@ export type RateLimitScope =
   | "AUTH_SESSION"
   | "DRAFT_CREATE"
   | "WALLET_ACTION"
+  | "MANUAL_RETRY"
   | "PUBLIC_READ";
 
 export interface RateLimitDecision {
@@ -21,6 +22,7 @@ const POLICY: Readonly<
   AUTH_SESSION: { limit: 20, windowSeconds: 60 },
   DRAFT_CREATE: { limit: 10, windowSeconds: 60 },
   WALLET_ACTION: { limit: 30, windowSeconds: 60 },
+  MANUAL_RETRY: { limit: 6, windowSeconds: 60 },
   PUBLIC_READ: { limit: 120, windowSeconds: 60 },
 };
 

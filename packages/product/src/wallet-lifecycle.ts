@@ -29,6 +29,7 @@ import { authorizeDraftClient, authorizeDraftProvider } from "./config";
 import { ProductError, validateIdempotencyKey } from "./service";
 import type {
   PactDraft,
+  ProductAutomationRepository,
   ProductRepository,
   WalletAction,
   WalletActionKind,
@@ -147,6 +148,7 @@ export interface WalletLifecycleRuntime {
   readonly github: GitHubPullRequestClient;
   readonly chain: ProductChainClient;
   readonly registrar: CanonicalPactRegistrar;
+  readonly automation?: ProductAutomationRepository;
 }
 
 interface BuiltCall {
@@ -797,6 +799,16 @@ export async function confirmWalletAction(input: {
     ) {
       throw new ProductError("CONFIRMATION_METADATA_MISSING", 500);
     }
+    if (
+      actionKindValue === "SUBMIT" &&
+      draft.linkedPactRecordId !== null &&
+      input.runtime.automation !== undefined
+    ) {
+      await input.runtime.automation.ensureScheduled(
+        draft.id,
+        draft.linkedPactRecordId,
+      );
+    }
     return Object.freeze({
       replayed: true,
       action: actionKindValue,
@@ -947,6 +959,16 @@ export async function confirmWalletAction(input: {
     confirmedAt: new Date(),
     ...(linkedPactRecordId === undefined ? {} : { linkedPactRecordId }),
   });
+  if (
+    actionKindValue === "SUBMIT" &&
+    draft.linkedPactRecordId !== null &&
+    input.runtime.automation !== undefined
+  ) {
+    await input.runtime.automation.ensureScheduled(
+      draft.id,
+      draft.linkedPactRecordId,
+    );
+  }
   return Object.freeze({
     replayed: false,
     action: actionKindValue,

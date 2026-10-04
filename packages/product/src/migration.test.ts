@@ -1,6 +1,8 @@
 import { readFile } from "node:fs/promises";
 import postgres, { type Sql } from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { createPactDatabase } from "@pact/database";
+import { PostgresAutomationRepository } from "@pact/automation";
 
 const configuredUrl =
   process.env.CI === "true"
@@ -46,7 +48,7 @@ async function applyCertifiedSchema(database: Sql): Promise<void> {
   );
 }
 
-async function applyProductMigration(database: Sql): Promise<void> {
+async function applyProductFoundation(database: Sql): Promise<void> {
   await database.unsafe(
     await migration(
       new URL("../drizzle/0002_product_foundation.sql", import.meta.url),
@@ -57,6 +59,19 @@ async function applyProductMigration(database: Sql): Promise<void> {
       new URL("../drizzle/0003_wallet_lifecycle.sql", import.meta.url),
     ),
   );
+}
+
+async function applyAutomationMigration(database: Sql): Promise<void> {
+  await database.unsafe(
+    await migration(
+      new URL("../drizzle/0004_automatic_settlement.sql", import.meta.url),
+    ),
+  );
+}
+
+async function applyProductMigration(database: Sql): Promise<void> {
+  await applyProductFoundation(database);
+  await applyAutomationMigration(database);
 }
 
 describeMigration("product forward migration", () => {
@@ -98,11 +113,12 @@ describeMigration("product forward migration", () => {
     const rows = await emptyDatabase<{ readonly table_name: string }[]>`
       SELECT table_name FROM information_schema.tables
       WHERE table_schema = 'public'
-        AND table_name IN ('pact_drafts', 'wallet_actions', 'auth_nonces')
+        AND table_name IN ('pact_drafts', 'wallet_actions', 'auth_nonces', 'pact_automation')
       ORDER BY table_name
     `;
     expect(rows.map((row) => row.table_name)).toEqual([
       "auth_nonces",
+      "pact_automation",
       "pact_drafts",
       "wallet_actions",
     ]);
@@ -128,7 +144,7 @@ describeMigration("product forward migration", () => {
         ${hash}, '2000000000'
       )
     `;
-    await applyProductMigration(existingDatabase);
+    await applyProductFoundation(existingDatabase);
     const before = await existingDatabase<{ readonly count: string }[]>`
       SELECT count(*)::text AS count FROM pact_records
     `;
@@ -149,12 +165,39 @@ describeMigration("product forward migration", () => {
         'migration-key-0001', ${hash}, ${pactId}, 'LINKED'
       )
     `;
+    await existingDatabase`
+      INSERT INTO wallet_actions (
+        id, draft_id, pact_record_id, action, required_signer, chain_id,
+        expected_target, value, calldata_hash, semantic_hash,
+        preparation_version, prepared_at_block, prepared_at_block_hash,
+        preparation_expires_at, expected_state_transition,
+        completion_deadline, job_expired_at, transaction_hash,
+        confirmation_status, idempotency_key, confirmed_job_id,
+        confirmed_job_key, confirmed_job_status, confirmed_at_block,
+        confirmed_at_block_hash, confirmed_at
+      ) VALUES (
+        ${crypto.randomUUID()}, ${draftId}, ${pactId}, 'SUBMIT', ${provider},
+        '5042002', ${target}, '0', ${hash}, ${hash}, 1, '1', ${hash},
+        now() + interval '5 minutes', 'FUNDED_TO_SUBMITTED',
+        '2000000000', '2000010000', ${`0x${"34".repeat(32)}`},
+        'CONFIRMED', 'migration-submit-key-01', '1', ${hash}, 2,
+        '2', ${hash}, now()
+      )
+    `;
+    await applyAutomationMigration(existingDatabase);
     const linked = await existingDatabase<
       { readonly linked_pact_record_id: string }[]
     >`
       SELECT linked_pact_record_id FROM pact_drafts WHERE id = ${draftId}
     `;
     expect(linked[0]?.linked_pact_record_id).toBe(pactId);
+    const scheduled = await existingDatabase<
+      { readonly pact_record_id: string; readonly enabled: boolean }[]
+    >`
+      SELECT pact_record_id, enabled FROM pact_automation
+      WHERE draft_id = ${draftId}
+    `;
+    expect(scheduled).toEqual([{ pact_record_id: pactId, enabled: true }]);
   });
 
   it("enforces one active nonce and confirmed-action core immutability", async () => {
@@ -268,5 +311,78 @@ describeMigration("product forward migration", () => {
     await expect(
       insert(crypto.randomUUID(), "wallet-action-key-02", null),
     ).rejects.toMatchObject({ code: "23505" });
+  });
+
+  it("atomically leases scheduler work and rejects stale owners", async () => {
+    if (existingDatabase === undefined)
+      throw new Error("test database unavailable");
+    await existingDatabase`
+      UPDATE pact_automation SET
+        enabled = true, next_check_at = now(), lease_owner = NULL,
+        lease_token = NULL, lease_until = NULL
+    `;
+    const databaseA = createPactDatabase(databaseUrl(existingDatabaseName));
+    const databaseB = createPactDatabase(databaseUrl(existingDatabaseName));
+    try {
+      const repositoryA = new PostgresAutomationRepository(databaseA);
+      const repositoryB = new PostgresAutomationRepository(databaseB);
+      const [claimsA, claimsB] = await Promise.all([
+        repositoryA.claimDue("worker-a", 1, 120),
+        repositoryB.claimDue("worker-b", 1, 120),
+      ]);
+      expect(claimsA.length + claimsB.length).toBe(1);
+      const claimed = claimsA[0] ?? claimsB[0];
+      if (claimed === undefined) throw new Error("lease was not claimed");
+      expect(
+        await repositoryA.renewLease(
+          claimed.id,
+          "stale-owner",
+          claimed.leaseToken,
+          120,
+        ),
+      ).toBe(false);
+      expect(
+        await repositoryA.completeLease({
+          id: claimed.id,
+          owner: "stale-owner",
+          token: claimed.leaseToken,
+          result: "STALE",
+          delaySeconds: 0,
+          retryableFailure: false,
+          enabled: false,
+        }),
+      ).toBe(false);
+      const ownerRepository =
+        claimed.leaseOwner === "worker-a" ? repositoryA : repositoryB;
+      expect(
+        await ownerRepository.completeLease({
+          id: claimed.id,
+          owner: claimed.leaseOwner,
+          token: claimed.leaseToken,
+          result: "NOT_SATISFIED_RETRYABLE",
+          delaySeconds: 30,
+          retryableFailure: false,
+          enabled: true,
+        }),
+      ).toBe(true);
+      const schedule = await ownerRepository.get(claimed.id);
+      if (schedule === undefined) throw new Error("schedule disappeared");
+      const firstWake = await ownerRepository.wake(
+        schedule.draftId,
+        schedule.pactRecordId,
+        "migration-manual-wake-0001",
+      );
+      const replayedWake = await ownerRepository.wake(
+        schedule.draftId,
+        schedule.pactRecordId,
+        "migration-manual-wake-0001",
+      );
+      expect(firstWake.replayed).toBe(false);
+      expect(replayedWake.replayed).toBe(true);
+      expect(replayedWake.record.id).toBe(firstWake.record.id);
+    } finally {
+      await databaseA.close();
+      await databaseB.close();
+    }
   });
 });

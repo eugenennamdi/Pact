@@ -10,9 +10,11 @@ import { getAddress } from "viem";
 import {
   PRODUCT_BASE_BRANCH,
   PRODUCT_CHAIN_ID,
+  PRODUCT_COMMERCE_ADDRESS,
   PRODUCT_COMPLETION_OFFSET_SECONDS,
   PRODUCT_COMPLETION_POLICY_VERSION,
   PRODUCT_EVENT,
+  PRODUCT_EVALUATOR_ADDRESS,
   PRODUCT_EXPIRY_OFFSET_SECONDS,
   PRODUCT_EXPIRY_POLICY_VERSION,
   PRODUCT_NETWORK,
@@ -53,8 +55,8 @@ interface DraftRow {
   readonly canonical_request_hash: string;
   readonly linked_pact_record_id: string | null;
   readonly lifecycle: string;
-  readonly created_at: Date;
-  readonly updated_at: Date;
+  readonly created_at: Date | string;
+  readonly updated_at: Date | string;
 }
 
 interface NonceRow {
@@ -64,9 +66,9 @@ interface NonceRow {
   readonly uri: string;
   readonly nonce: string;
   readonly chain_id: string;
-  readonly issued_at: Date;
-  readonly expires_at: Date;
-  readonly consumed_at: Date | null;
+  readonly issued_at: Date | string;
+  readonly expires_at: Date | string;
+  readonly consumed_at: Date | string | null;
 }
 
 interface WalletActionRow {
@@ -83,7 +85,7 @@ interface WalletActionRow {
   readonly preparation_version: number;
   readonly prepared_at_block: string;
   readonly prepared_at_block_hash: string | null;
-  readonly preparation_expires_at: Date;
+  readonly preparation_expires_at: Date | string;
   readonly expected_state_transition: string;
   readonly completion_deadline: string | null;
   readonly job_expired_at: string | null;
@@ -95,9 +97,20 @@ interface WalletActionRow {
   readonly confirmed_job_status: number | null;
   readonly confirmed_at_block: string | null;
   readonly confirmed_at_block_hash: string | null;
-  readonly confirmed_at: Date | null;
-  readonly created_at: Date;
-  readonly updated_at: Date;
+  readonly confirmed_at: Date | string | null;
+  readonly created_at: Date | string;
+  readonly updated_at: Date | string;
+}
+
+function timestamp(value: Date | string): Date {
+  const parsed = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(parsed.getTime()))
+    throw new Error("INVALID_DATABASE_TIMESTAMP");
+  return parsed;
+}
+
+function nullableTimestamp(value: Date | string | null): Date | null {
+  return value === null ? null : timestamp(value);
 }
 
 function mapDraft(row: DraftRow): PactDraft {
@@ -139,8 +152,8 @@ function mapDraft(row: DraftRow): PactDraft {
     canonicalRequestHash: row.canonical_request_hash as Hex32,
     linkedPactRecordId: row.linked_pact_record_id,
     lifecycle: row.lifecycle as PactDraft["lifecycle"],
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
+    createdAt: timestamp(row.created_at),
+    updatedAt: timestamp(row.updated_at),
   });
 }
 
@@ -152,9 +165,9 @@ function mapNonce(row: NonceRow): AuthNonce {
     uri: row.uri,
     nonce: row.nonce,
     chainId: BigInt(row.chain_id),
-    issuedAt: row.issued_at,
-    expiresAt: row.expires_at,
-    consumedAt: row.consumed_at,
+    issuedAt: timestamp(row.issued_at),
+    expiresAt: timestamp(row.expires_at),
+    consumedAt: nullableTimestamp(row.consumed_at),
   });
 }
 
@@ -173,7 +186,7 @@ function mapWalletAction(row: WalletActionRow): WalletAction {
     preparationVersion: row.preparation_version,
     preparedAtBlock: BigInt(row.prepared_at_block),
     preparedAtBlockHash: row.prepared_at_block_hash as Hex32 | null,
-    preparationExpiresAt: row.preparation_expires_at,
+    preparationExpiresAt: timestamp(row.preparation_expires_at),
     expectedStateTransition: row.expected_state_transition,
     completionDeadline:
       row.completion_deadline === null ? null : BigInt(row.completion_deadline),
@@ -189,9 +202,9 @@ function mapWalletAction(row: WalletActionRow): WalletAction {
     confirmedAtBlock:
       row.confirmed_at_block === null ? null : BigInt(row.confirmed_at_block),
     confirmedAtBlockHash: row.confirmed_at_block_hash as Hex32 | null,
-    confirmedAt: row.confirmed_at,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
+    confirmedAt: nullableTimestamp(row.confirmed_at),
+    createdAt: timestamp(row.created_at),
+    updatedAt: timestamp(row.updated_at),
   });
 }
 
@@ -213,7 +226,7 @@ export class PostgresProductRepository implements ProductRepository {
       await transaction`SELECT pg_advisory_xact_lock(hashtext(${`${input.walletAddress}:${input.domain}`}))`;
       await transaction`
         UPDATE auth_nonces
-        SET consumed_at = ${input.issuedAt}
+        SET consumed_at = ${input.issuedAt.toISOString()}
         WHERE wallet_address = ${input.walletAddress}
           AND domain = ${input.domain}
           AND consumed_at IS NULL
@@ -224,7 +237,7 @@ export class PostgresProductRepository implements ProductRepository {
         ) VALUES (
           ${crypto.randomUUID()}, ${input.walletAddress}, ${input.domain},
           ${input.uri}, ${input.nonce}, ${input.chainId.toString()},
-          ${input.issuedAt}, ${input.expiresAt}
+          ${input.issuedAt.toISOString()}, ${input.expiresAt.toISOString()}
         )
         RETURNING *
       `;
@@ -244,10 +257,10 @@ export class PostgresProductRepository implements ProductRepository {
   async consumeNonce(id: string, consumedAt: Date): Promise<boolean> {
     const rows = await this.#database.sql<{ readonly id: string }[]>`
       UPDATE auth_nonces
-      SET consumed_at = ${consumedAt}
+      SET consumed_at = ${consumedAt.toISOString()}
       WHERE id = ${id}
         AND consumed_at IS NULL
-        AND expires_at > ${consumedAt}
+        AND expires_at > ${consumedAt.toISOString()}
       RETURNING id
     `;
     return rows.length === 1;
@@ -384,7 +397,7 @@ export class PostgresProductRepository implements ProductRepository {
             preparation_version = ${input.preparationVersion},
             prepared_at_block = ${input.preparedAtBlock.toString()},
             prepared_at_block_hash = ${input.preparedAtBlockHash},
-            preparation_expires_at = ${input.preparationExpiresAt},
+            preparation_expires_at = ${input.preparationExpiresAt.toISOString()},
             expected_state_transition = ${input.expectedStateTransition},
             completion_deadline = ${input.completionDeadline?.toString() ?? null},
             job_expired_at = ${input.jobExpiredAt?.toString() ?? null},
@@ -416,7 +429,7 @@ export class PostgresProductRepository implements ProductRepository {
           ${input.expectedTarget}, ${input.value.toString()},
           ${input.calldataHash}, ${input.semanticHash},
           ${input.preparationVersion}, ${input.preparedAtBlock.toString()},
-          ${input.preparedAtBlockHash}, ${input.preparationExpiresAt},
+          ${input.preparedAtBlockHash}, ${input.preparationExpiresAt.toISOString()},
           ${input.expectedStateTransition},
           ${input.completionDeadline?.toString() ?? null},
           ${input.jobExpiredAt?.toString() ?? null}, 'PENDING',
@@ -479,7 +492,7 @@ export class PostgresProductRepository implements ProductRepository {
           confirmed_job_status = ${input.confirmedJobStatus},
           confirmed_at_block = ${input.confirmedAtBlock.toString()},
           confirmed_at_block_hash = ${input.confirmedAtBlockHash},
-          confirmed_at = ${input.confirmedAt}, updated_at = now()
+          confirmed_at = ${input.confirmedAt.toISOString()}, updated_at = now()
         WHERE id = ${input.actionId} AND confirmation_status <> 'CONFIRMED'
         RETURNING *
       `;
@@ -543,11 +556,26 @@ export class PostgresProductRepository implements ProductRepository {
         readonly chain_job_status: number | null;
         readonly chain_expired_at: string | null;
         readonly evidence_hash: Hex32 | null;
+        readonly evidence_condition_hash: Hex32 | null;
+        readonly evidence_repository: string | null;
+        readonly evidence_pull_request: number | null;
+        readonly evidence_base_branch: string | null;
         readonly merge_commit_sha: string | null;
         readonly merged_at: string | null;
         readonly observed_at: string | null;
+        readonly attestation_digest: Hex32 | null;
+        readonly attestation_verifier: string | null;
+        readonly satisfied_at: string | null;
+        readonly verified_at: string | null;
+        readonly valid_until: string | null;
         readonly canonical_tx_hash: Hex32 | null;
-        readonly settlement_block_number: string | null;
+        readonly receipt_block_number: string | null;
+        readonly receipt_block_hash: Hex32 | null;
+        readonly receipt_transaction_index: number | null;
+        readonly event_block_number: string | null;
+        readonly event_block_hash: Hex32 | null;
+        readonly event_log_index: number | null;
+        readonly broadcast_attempt_count: number | null;
       }[]
     >`
       SELECT pr.job_id, pr.job_key, pr.completion_deadline,
@@ -555,10 +583,21 @@ export class PostgresProductRepository implements ProductRepository {
         relay.state AS relay_state,
         chain.job_status AS chain_job_status,
         chain.job_expired_at AS chain_expired_at,
-        evidence.evidence_hash, evidence.merge_commit_sha,
+        evidence.evidence_hash,
+        evidence.condition_hash AS evidence_condition_hash,
+        evidence.repository AS evidence_repository,
+        evidence.pull_request AS evidence_pull_request,
+        evidence.base_branch AS evidence_base_branch,
+        evidence.merge_commit_sha,
         evidence.merged_at, evidence.observed_at,
+        att.digest AS attestation_digest,
+        att.signer AS attestation_verifier,
+        att.satisfied_at, att.verified_at, att.valid_until,
         relay.canonical_tx_hash,
-        relay.event_block_number AS settlement_block_number
+        relay.receipt_block_number, relay.receipt_block_hash,
+        relay.receipt_transaction_index,
+        relay.event_block_number, relay.event_block_hash,
+        relay.event_log_index, relay.broadcast_attempt_count
       FROM pact_records pr
       LEFT JOIN LATERAL (
         SELECT * FROM operations
@@ -576,6 +615,11 @@ export class PostgresProductRepository implements ProductRepository {
         WHERE eo.pact_record_id = pr.id ORDER BY va.created_at DESC LIMIT 1
       ) evidence ON true
       LEFT JOIN LATERAL (
+        SELECT a.* FROM attestations a
+        WHERE a.pact_record_id = pr.id AND a.active = true
+        ORDER BY a.created_at DESC LIMIT 1
+      ) att ON true
+      LEFT JOIN LATERAL (
         SELECT * FROM relay_intents
         WHERE pact_record_id = pr.id ORDER BY updated_at DESC LIMIT 1
       ) relay ON true
@@ -586,27 +630,69 @@ export class PostgresProductRepository implements ProductRepository {
     if (row === undefined) throw new Error("LINKED_PACT_RECORD_MISSING");
     const evidence =
       row.evidence_hash === null ||
+      row.evidence_condition_hash === null ||
+      row.evidence_repository === null ||
+      row.evidence_pull_request === null ||
+      row.evidence_base_branch === null ||
       row.merge_commit_sha === null ||
       row.merged_at === null ||
-      row.observed_at === null
+      row.observed_at === null ||
+      row.attestation_digest === null ||
+      row.attestation_verifier === null ||
+      row.satisfied_at === null ||
+      row.verified_at === null ||
+      row.valid_until === null
         ? null
         : {
+            conditionHash: row.evidence_condition_hash,
             evidenceHash: row.evidence_hash,
+            repository: row.evidence_repository,
+            pullRequest: row.evidence_pull_request,
+            baseBranch: row.evidence_base_branch,
             mergeCommitSha: row.merge_commit_sha as `0x${string}`,
             mergedAt: BigInt(row.merged_at),
             observedAt: BigInt(row.observed_at),
+            attestationDigest: row.attestation_digest,
+            verifier: getAddress(row.attestation_verifier),
+            satisfiedAt: BigInt(row.satisfied_at),
+            verifiedAt: BigInt(row.verified_at),
+            validUntil: BigInt(row.valid_until),
           };
     const settlement: PublicSettlementSummary | null =
       row.canonical_tx_hash !== null &&
+      row.receipt_block_number !== null &&
+      row.receipt_block_hash !== null &&
+      row.receipt_transaction_index !== null &&
+      row.event_block_number !== null &&
+      row.event_block_hash !== null &&
+      row.event_log_index !== null &&
+      row.broadcast_attempt_count !== null &&
+      row.evidence_hash !== null &&
       (row.relay_state === "SETTLED" ||
         row.relay_state === "SETTLED_EXTERNALLY")
         ? {
+            jobId: BigInt(row.job_id),
+            jobKey: row.job_key,
+            chainId: draft.chainId,
+            commerce: getAddress(PRODUCT_COMMERCE_ADDRESS),
+            evaluator: getAddress(PRODUCT_EVALUATOR_ADDRESS),
             transactionHash: row.canonical_tx_hash,
             state: row.relay_state,
-            blockNumber:
-              row.settlement_block_number === null
-                ? null
-                : BigInt(row.settlement_block_number),
+            receiptBlockNumber: BigInt(row.receipt_block_number),
+            receiptBlockHash: row.receipt_block_hash,
+            receiptTransactionIndex: row.receipt_transaction_index,
+            eventBlockNumber: BigInt(row.event_block_number),
+            eventBlockHash: row.event_block_hash,
+            eventLogIndex: row.event_log_index,
+            finalJobStatus: 3,
+            bindingAccepted: true,
+            broadcastAttemptCount: row.broadcast_attempt_count,
+            grossBudget: draft.amountBaseUnits,
+            grossProviderPayout: draft.amountBaseUnits,
+            treasuryApplicationPayout: 0n,
+            evaluatorApplicationPayout: 0n,
+            evidenceHash: row.evidence_hash,
+            completionReason: row.evidence_hash,
           }
         : null;
     return {
@@ -615,9 +701,11 @@ export class PostgresProductRepository implements ProductRepository {
       operationState: row.operation_state,
       relayState: row.relay_state,
       chainJobStatus:
-        row.chain_job_status ??
-        latestConfirmedAction?.confirmedJobStatus ??
-        null,
+        settlement === null
+          ? (row.chain_job_status ??
+            latestConfirmedAction?.confirmedJobStatus ??
+            null)
+          : 3,
       chainExpiredAt:
         row.chain_expired_at === null
           ? (createAction?.jobExpiredAt ?? null)

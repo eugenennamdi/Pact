@@ -146,6 +146,15 @@ export interface ProductRepository {
   ): Promise<ProductProjectionInput | undefined>;
 }
 
+export interface ProductAutomationRepository {
+  ensureScheduled(draftId: string, pactRecordId: string): Promise<unknown>;
+  wake(
+    draftId: string,
+    pactRecordId: string,
+    idempotencyKey: string,
+  ): Promise<{ readonly replayed: boolean }>;
+}
+
 export interface PreparedWalletActionInput {
   readonly draftId: string;
   readonly pactRecordId: string | null;
@@ -204,16 +213,44 @@ export interface ProductProjectionInput {
 }
 
 export interface PublicEvidenceSummary {
+  readonly conditionHash: Hex32;
   readonly evidenceHash: Hex32;
+  readonly repository: string;
+  readonly pullRequest: number;
+  readonly baseBranch: string;
   readonly mergeCommitSha: Hex;
   readonly mergedAt: bigint;
   readonly observedAt: bigint;
+  readonly attestationDigest: Hex32;
+  readonly verifier: Address;
+  readonly satisfiedAt: bigint;
+  readonly verifiedAt: bigint;
+  readonly validUntil: bigint;
 }
 
 export interface PublicSettlementSummary {
+  readonly jobId: bigint;
+  readonly jobKey: Hex32;
+  readonly chainId: bigint;
+  readonly commerce: Address;
+  readonly evaluator: Address;
   readonly transactionHash: Hex32;
   readonly state: "SETTLED" | "SETTLED_EXTERNALLY";
-  readonly blockNumber: bigint | null;
+  readonly receiptBlockNumber: bigint;
+  readonly receiptBlockHash: Hex32;
+  readonly receiptTransactionIndex: number;
+  readonly eventBlockNumber: bigint;
+  readonly eventBlockHash: Hex32;
+  readonly eventLogIndex: number;
+  readonly finalJobStatus: number;
+  readonly bindingAccepted: boolean;
+  readonly broadcastAttemptCount: number;
+  readonly grossBudget: bigint;
+  readonly grossProviderPayout: bigint;
+  readonly treasuryApplicationPayout: bigint;
+  readonly evaluatorApplicationPayout: bigint;
+  readonly evidenceHash: Hex32;
+  readonly completionReason: Hex32;
 }
 
 export interface SessionClaims {

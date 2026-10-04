@@ -1,0 +1,26 @@
+{
+  "name": "@pact/automation",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "prepare": "npm run build --workspace=@pact/protocol && npm run build --workspace=@pact/verifier && npm run build --workspace=@pact/database && npm run build --workspace=@pact/orchestrator && npm run build",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@pact/database": "0.0.0",
+    "@pact/orchestrator": "0.0.0",
+    "@pact/protocol": "0.0.0",
+    "@pact/verifier": "0.0.0",
+    "viem": "2.56.9"
+  }
+}
