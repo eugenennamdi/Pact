@@ -7,8 +7,17 @@ import { ARC_TESTNET_CHAIN_ID } from "./wallet";
 import { ProductApiFailure, createProductApiClient } from "./product-client";
 import { ErrorNotice } from "./error-notice";
 import { useWallet, WalletControls } from "./wallet-boundary";
+import { CopyButton, NetworkBadge } from "./presentation";
 
 const api = createProductApiClient();
+
+function displayUsdc(baseUnits: string): string {
+  if (!/^\d+$/.test(baseUnits)) return baseUnits;
+  const value = baseUnits.padStart(7, "0");
+  const whole = value.slice(0, -6);
+  const fraction = value.slice(-6).replace(/0+$/, "");
+  return fraction.length === 0 ? `${whole} USDC` : `${whole}.${fraction} USDC`;
+}
 
 export function CreatePact() {
   const wallet = useWallet();
@@ -59,102 +68,262 @@ export function CreatePact() {
 
   return (
     <div className="grid">
-      <div>
+      <div className="stack">
         <WalletControls />
+
         <form className="card stack" onSubmit={(event) => void submit(event)}>
-          <h2>Create a GitHub PR Pact</h2>
-          <label>
-            GitHub repository
-            <input
-              name="repository"
-              value={repository}
-              onChange={(event) => setRepository(event.target.value)}
-              placeholder="owner/repository"
-              required
-            />
-          </label>
-          <label>
-            Pull request number
-            <input
-              name="pullRequest"
-              type="number"
-              min="1"
-              step="1"
-              value={pullRequest}
-              onChange={(event) => setPullRequest(event.target.value)}
-              required
-            />
-          </label>
-          <label>
-            Provider wallet address
-            <input
-              name="provider"
-              value={provider}
-              onChange={(event) => setProvider(event.target.value)}
-              placeholder="0x…"
-              required
-            />
-          </label>
-          <label>
-            USDC amount
-            <input
-              name="amount"
-              inputMode="decimal"
-              value={amount}
-              onChange={(event) => setAmount(event.target.value)}
-              placeholder="0.10"
-              required
-            />
-          </label>
-          <button
-            type="submit"
-            disabled={
-              submitting ||
-              !wallet.authenticated ||
-              wallet.chainId !== ARC_TESTNET_CHAIN_ID
-            }
-          >
-            Create draft
-          </button>
+          <div className="card-header">
+            <div className="card-title-group">
+              <h2>New Pact instruction</h2>
+              <p className="card-description">
+                Lock USDC against an objectively verifiable GitHub merge event.
+              </p>
+            </div>
+            <span className="badge badge-neutral">Draft specification</span>
+          </div>
+
+          <div className="form-group">
+            <label>
+              <span>GitHub repository</span>
+              <span className="label-hint">Owner and repository name</span>
+              <input
+                name="repository"
+                value={repository}
+                onChange={(event) => setRepository(event.target.value)}
+                placeholder="owner/repository"
+                required
+              />
+            </label>
+          </div>
+
+          <div className="form-group">
+            <label>
+              <span>Pull request number</span>
+              <span className="label-hint">
+                The PR whose merge triggers escrow settlement
+              </span>
+              <input
+                name="pullRequest"
+                type="number"
+                min="1"
+                step="1"
+                value={pullRequest}
+                onChange={(event) => setPullRequest(event.target.value)}
+                placeholder="1"
+                required
+              />
+            </label>
+          </div>
+
+          <div className="form-group">
+            <label>
+              <span>Provider wallet address</span>
+              <span className="label-hint">
+                Recipient EVM address receiving USDC upon merge
+              </span>
+              <input
+                name="provider"
+                className="font-mono"
+                value={provider}
+                onChange={(event) => setProvider(event.target.value)}
+                placeholder="0x…"
+                required
+              />
+            </label>
+          </div>
+
+          <div className="form-group">
+            <label>
+              <span>USDC amount</span>
+              <span className="label-hint">
+                Total escrow locked in ERC-8183 (e.g. 0.10)
+              </span>
+              <input
+                name="amount"
+                inputMode="decimal"
+                value={amount}
+                onChange={(event) => setAmount(event.target.value)}
+                placeholder="0.10"
+                required
+              />
+            </label>
+          </div>
+
+          <div className="actions" style={{ marginTop: "0.5rem" }}>
+            <button
+              type="submit"
+              disabled={
+                submitting ||
+                !wallet.authenticated ||
+                wallet.chainId !== ARC_TESTNET_CHAIN_ID
+              }
+            >
+              {submitting
+                ? "Creating draft instruction…"
+                : !wallet.authenticated
+                  ? "Authenticate wallet to create"
+                  : "Create draft"}
+            </button>
+          </div>
+
           {error !== null && <ErrorNotice error={error} />}
         </form>
       </div>
-      <section className="card" aria-labelledby="preview-heading">
-        <h2 id="preview-heading">Server-owned preview</h2>
+
+      <section
+        className="card"
+        aria-labelledby="preview-heading"
+        style={{ height: "fit-content" }}
+      >
+        <div className="card-header">
+          <div className="card-title-group">
+            <h2 id="preview-heading">Deterministic preview</h2>
+            <p className="card-description">
+              Authoritative parameters governed by Pact and the Arc settlement
+              kernel.
+            </p>
+          </div>
+          {result !== null && (
+            <span className="badge badge-verified">Draft created</span>
+          )}
+        </div>
+
         {result === null ? (
-          <p>
-            The network, condition hash, deadline policy and deployment identity
-            will appear here after the server validates the open PR.
-          </p>
+          <div
+            className="stack"
+            style={{ gap: "1rem", color: "var(--text-secondary)" }}
+          >
+            <p style={{ margin: 0 }}>
+              The target network, condition hash, deadline policy, and
+              deployment identity will be derived after the server validates the
+              open pull request against GitHub.
+            </p>
+            <div
+              style={{
+                background: "var(--bg-subtle)",
+                padding: "1rem",
+                borderRadius: "var(--radius-md)",
+                border: "1px solid var(--border-subtle)",
+              }}
+            >
+              <span className="eyebrow" style={{ marginBottom: "0.5rem" }}>
+                Pre-configured protocol constraints
+              </span>
+              <dl style={{ margin: 0 }}>
+                <dt>Network</dt>
+                <dd>Arc Testnet (5042002)</dd>
+                <dt>Escrow standard</dt>
+                <dd>ERC-8183</dd>
+                <dt>Evaluator</dt>
+                <dd>PactEvaluator.sol</dd>
+                <dt>Verification rule</dt>
+                <dd>Positive-only GitHub PR merge</dd>
+              </dl>
+            </div>
+          </div>
         ) : (
-          <>
-            <dl>
-              <dt>Network</dt>
-              <dd>{result.network}</dd>
-              <dt>Condition</dt>
-              <dd>
-                {result.repository}#{result.pullRequest} merged to{" "}
-                {result.baseBranch}
-              </dd>
-              <dt>Condition hash</dt>
-              <dd className="hash">{result.conditionHash}</dd>
-              <dt>Amount</dt>
-              <dd>{result.amountBaseUnits} base units</dd>
-              <dt>Provider</dt>
-              <dd className="hash">{result.provider}</dd>
-              <dt>Completion policy</dt>
-              <dd>{result.deadlinePolicy.completionOffsetSeconds} seconds</dd>
-              <dt>Expiry policy</dt>
-              <dd>{result.deadlinePolicy.expiryOffsetSeconds} seconds</dd>
-              <dt>Commerce</dt>
-              <dd className="hash">{result.commerceAddress}</dd>
-              <dt>Evaluator</dt>
-              <dd className="hash">{result.evaluatorAddress}</dd>
-            </dl>
-            <Link className="button-link" href={`/pacts/${result.publicSlug}`}>
-              Open Pact
-            </Link>
-          </>
+          <div className="stack" style={{ gap: "1.25rem" }}>
+            <div>
+              <span className="eyebrow" style={{ marginBottom: "0.5rem" }}>
+                Human-readable terms
+              </span>
+              <dl>
+                <dt>Condition</dt>
+                <dd>
+                  <strong>
+                    {result.repository}#{result.pullRequest}
+                  </strong>{" "}
+                  merged into <code>{result.baseBranch}</code>
+                </dd>
+                <dt>Escrow amount</dt>
+                <dd>
+                  <strong>{displayUsdc(result.amountBaseUnits)}</strong>{" "}
+                  <span
+                    style={{
+                      color: "var(--text-muted)",
+                      fontSize: "0.8125rem",
+                    }}
+                  >
+                    ({result.amountBaseUnits} base units)
+                  </span>
+                </dd>
+                <dt>Provider</dt>
+                <dd>
+                  <span className="tech-address-wrapper">
+                    <code className="tech-hash">{result.provider}</code>
+                    <CopyButton text={result.provider} label="Copy address" />
+                  </span>
+                </dd>
+                <dt>Network</dt>
+                <dd>
+                  <NetworkBadge
+                    network={result.network}
+                    chainId={result.chainId}
+                  />
+                </dd>
+              </dl>
+            </div>
+
+            <div
+              style={{
+                borderTop: "1px solid var(--border-subtle)",
+                paddingTop: "1rem",
+              }}
+            >
+              <span className="eyebrow" style={{ marginBottom: "0.5rem" }}>
+                Technical protocol parameters
+              </span>
+              <dl>
+                <dt>Condition hash</dt>
+                <dd>
+                  <span className="tech-address-wrapper">
+                    <code className="tech-hash">{result.conditionHash}</code>
+                    <CopyButton
+                      text={result.conditionHash}
+                      label="Copy condition hash"
+                    />
+                  </span>
+                </dd>
+                <dt>Completion deadline</dt>
+                <dd>
+                  {result.deadlinePolicy.completionOffsetSeconds}s after funding
+                </dd>
+                <dt>Expiry policy</dt>
+                <dd>
+                  {result.deadlinePolicy.expiryOffsetSeconds}s maximum lifetime
+                </dd>
+                <dt>Commerce contract</dt>
+                <dd>
+                  <span className="tech-address-wrapper">
+                    <code className="tech-hash">{result.commerceAddress}</code>
+                    <CopyButton
+                      text={result.commerceAddress}
+                      label="Copy address"
+                    />
+                  </span>
+                </dd>
+                <dt>Evaluator contract</dt>
+                <dd>
+                  <span className="tech-address-wrapper">
+                    <code className="tech-hash">{result.evaluatorAddress}</code>
+                    <CopyButton
+                      text={result.evaluatorAddress}
+                      label="Copy address"
+                    />
+                  </span>
+                </dd>
+              </dl>
+            </div>
+
+            <div className="actions" style={{ margin: "0.5rem 0 0 0" }}>
+              <Link
+                className="button-link"
+                href={`/pacts/${result.publicSlug}`}
+              >
+                Open Pact workspace →
+              </Link>
+            </div>
+          </div>
         )}
       </section>
     </div>

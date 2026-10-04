@@ -4,12 +4,14 @@ import { WalletBoundary } from "../../frontend/wallet-boundary";
 export default function CreatePage() {
   return (
     <main className="page">
-      <p className="eyebrow">Interactive Arc Testnet product</p>
-      <h1>Create Pact</h1>
-      <p>
-        Connect and authenticate the client wallet. Pact validates an open
-        public GitHub pull request and owns all protocol policy fields.
-      </p>
+      <div className="page-header">
+        <p className="eyebrow">Interactive Arc Testnet Execution</p>
+        <h1>Create Pact</h1>
+        <p className="lede">
+          Connect and authenticate the client wallet. Pact validates an open
+          public GitHub pull request and enforces protocol deadlines onchain.
+        </p>
+      </div>
       <WalletBoundary>
         <CreatePact />
       </WalletBoundary>

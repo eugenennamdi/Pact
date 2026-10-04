@@ -258,77 +258,141 @@ export function useWallet(): WalletContextValue {
 export function WalletControls() {
   const wallet = useWallet();
   return (
-    <section className="wallet-panel" aria-labelledby="wallet-heading">
-      <h2 id="wallet-heading">Wallet</h2>
-      {wallet.providers.length === 0 ? (
-        <p>No EVM browser wallet detected.</p>
-      ) : (
-        <label>
-          Wallet provider
-          <select
-            value={wallet.selectedProviderId ?? ""}
-            onChange={(event) => wallet.selectProvider(event.target.value)}
-            disabled={wallet.busy}
-          >
-            <option value="" disabled>
-              Choose wallet
-            </option>
-            {wallet.providers.map((item) => (
-              <option key={item.info.uuid} value={item.info.uuid}>
-                {item.info.name}
-              </option>
-            ))}
-          </select>
-        </label>
-      )}
-      {wallet.address === null ? (
-        <button
-          type="button"
-          onClick={() => void wallet.connect()}
-          disabled={wallet.busy || wallet.selectedProviderId === null}
-        >
-          Connect wallet
-        </button>
-      ) : (
-        <>
-          <p className="hash">Connected: {wallet.address}</p>
-          <p>
-            Network:{" "}
-            {wallet.chainId === ARC_TESTNET_CHAIN_ID
-              ? "Arc Testnet"
-              : "WRONG_NETWORK"}
+    <section className="card wallet-panel" aria-labelledby="wallet-heading">
+      <div className="card-header">
+        <div className="card-title-group">
+          <h2 id="wallet-heading">Wallet connection</h2>
+          <p className="card-description">
+            Connect and authenticate to prepare and sign onchain actions on Arc
+            Testnet.
           </p>
-          {wallet.chainId !== ARC_TESTNET_CHAIN_ID ? (
-            <button
-              type="button"
-              onClick={() => void wallet.switchNetwork()}
+        </div>
+        {wallet.address !== null && (
+          <span
+            className={`badge ${
+              wallet.chainId !== ARC_TESTNET_CHAIN_ID
+                ? "badge-error"
+                : wallet.authenticated
+                  ? "badge-verified"
+                  : "badge-pending"
+            }`}
+          >
+            <span className="badge-dot" />
+            {wallet.chainId !== ARC_TESTNET_CHAIN_ID
+              ? "Wrong Network"
+              : wallet.authenticated
+                ? "Authenticated"
+                : "Needs Sign-in"}
+          </span>
+        )}
+      </div>
+
+      {wallet.providers.length === 0 ? (
+        <p className="form-hint" style={{ margin: "0.5rem 0" }}>
+          No EVM browser wallet detected. Install a Web3 wallet extension like
+          MetaMask, Rabby, or Coinbase Wallet.
+        </p>
+      ) : (
+        <div className="form-group" style={{ marginBottom: "1rem" }}>
+          <label>
+            <span>Wallet provider</span>
+            <select
+              value={wallet.selectedProviderId ?? ""}
+              onChange={(event) => wallet.selectProvider(event.target.value)}
               disabled={wallet.busy}
             >
-              Switch to Arc Testnet
-            </button>
-          ) : wallet.authenticated ? (
-            <p role="status">Authenticated</p>
-          ) : (
-            <button
-              type="button"
-              onClick={() => void wallet.authenticate()}
-              disabled={wallet.busy}
-            >
-              Sign in with wallet
-            </button>
-          )}
+              <option value="" disabled>
+                Choose wallet provider
+              </option>
+              {wallet.providers.map((item) => (
+                <option key={item.info.uuid} value={item.info.uuid}>
+                  {item.info.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+      )}
+
+      {wallet.address === null ? (
+        <div className="actions" style={{ margin: "0.75rem 0 0 0" }}>
           <button
             type="button"
-            className="secondary"
-            onClick={() => void wallet.disconnect()}
-            disabled={wallet.busy}
+            onClick={() => void wallet.connect()}
+            disabled={wallet.busy || wallet.selectedProviderId === null}
           >
-            Disconnect
+            Connect wallet
           </button>
-        </>
+        </div>
+      ) : (
+        <div className="stack" style={{ gap: "0.85rem" }}>
+          <dl style={{ margin: 0 }}>
+            <dt>Connected address</dt>
+            <dd>
+              <span className="tech-address-wrapper">
+                <code className="tech-hash">{wallet.address}</code>
+              </span>
+            </dd>
+            <dt>Network</dt>
+            <dd>
+              <span className="network-badge">
+                <span className="network-indicator" />
+                {wallet.chainId === ARC_TESTNET_CHAIN_ID
+                  ? "Arc Testnet (5042002)"
+                  : `Wrong network (${wallet.chainId ?? "unknown"})`}
+              </span>
+            </dd>
+            <dt>Session status</dt>
+            <dd>
+              {wallet.authenticated ? (
+                <span
+                  role="status"
+                  style={{ color: "var(--accent-verified)", fontWeight: 600 }}
+                >
+                  Active authenticated session
+                </span>
+              ) : (
+                <span
+                  style={{ color: "var(--accent-pending)", fontWeight: 550 }}
+                >
+                  Signature challenge required
+                </span>
+              )}
+            </dd>
+          </dl>
+
+          <div className="actions" style={{ margin: "0.5rem 0 0 0" }}>
+            {wallet.chainId !== ARC_TESTNET_CHAIN_ID ? (
+              <button
+                type="button"
+                onClick={() => void wallet.switchNetwork()}
+                disabled={wallet.busy}
+              >
+                Switch to Arc Testnet
+              </button>
+            ) : wallet.authenticated ? null : (
+              <button
+                type="button"
+                onClick={() => void wallet.authenticate()}
+                disabled={wallet.busy}
+              >
+                Sign in with wallet
+              </button>
+            )}
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => void wallet.disconnect()}
+              disabled={wallet.busy}
+            >
+              Disconnect
+            </button>
+          </div>
+        </div>
       )}
+
       {wallet.message !== null && (
-        <p role="alert" className="error">
+        <p role="alert" className="error" style={{ marginTop: "1rem" }}>
           {wallet.message}
         </p>
       )}

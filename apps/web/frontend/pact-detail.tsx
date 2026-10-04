@@ -17,6 +17,16 @@ import {
   sendPreparedTransaction,
 } from "./wallet-action";
 import { WalletControls, useWallet } from "./wallet-boundary";
+import {
+  ActorBadge,
+  AddressDisplay,
+  CopyButton,
+  ExecutionRail,
+  HashDisplay,
+  Icon,
+  NetworkBadge,
+  StatusBadge,
+} from "./presentation";
 
 const api = createProductApiClient();
 const terminalStatuses = new Set(["COMPLETED", "EXPIRED", "NEEDS_ATTENTION"]);
@@ -39,6 +49,31 @@ function notReady(error: unknown): boolean {
     error instanceof ProductApiFailure &&
     ["EVIDENCE_NOT_READY", "SETTLEMENT_NOT_READY"].includes(error.code)
   );
+}
+
+function actionTitle(action: string): string {
+  switch (action) {
+    case "create-job":
+    case "CREATE_JOB":
+      return "Create onchain job";
+    case "bind-condition":
+    case "BIND_CONDITION":
+      return "Bind verification condition";
+    case "set-budget":
+    case "SET_BUDGET":
+      return "Confirm job amount";
+    case "approve-usdc":
+    case "APPROVE_USDC":
+      return "Approve USDC";
+    case "fund":
+    case "FUND":
+      return "Fund escrow";
+    case "submit":
+    case "SUBMIT":
+      return "Submit work";
+    default:
+      return action.replace(/[_-]/g, " ");
+  }
 }
 
 function WalletActionPanel({
@@ -65,6 +100,7 @@ function WalletActionPanel({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [showTechnicalDetails, setShowTechnicalDetails] = useState(false);
 
   useEffect(() => {
     setPrepared(null);
@@ -73,6 +109,7 @@ function WalletActionPanel({
     setConfirmed(false);
     setError(null);
     setNotice(null);
+    setShowTechnicalDetails(false);
   }, [pact.nextRequiredAction]);
 
   async function prepare(action: PublicWalletActionPath) {
@@ -167,70 +204,404 @@ function WalletActionPanel({
 
   return (
     <section className="card" aria-labelledby="action-heading">
-      <h2 id="action-heading">Next action</h2>
+      <div className="card-header">
+        <div className="card-title-group">
+          <h2 id="action-heading">Primary action surface</h2>
+          <p className="card-description">
+            Role-aware, prepare-first wallet interaction contract.
+          </p>
+        </div>
+        <ActorBadge actor={pact.nextRequiredActor} />
+      </div>
+
+      {/* Decision: READY */}
       {decision.kind === "READY" && prepared === null && (
-        <button
-          type="button"
-          onClick={() => void prepare(decision.action)}
-          disabled={busy}
-        >
-          Prepare {decision.label}
-        </button>
-      )}
-      {decision.kind === "CONNECT" && <p>Connect the required wallet.</p>}
-      {decision.kind === "AUTHENTICATE" && (
-        <p>Authenticate the connected wallet before preparing this action.</p>
-      )}
-      {decision.kind === "WRONG_NETWORK" && <p>WRONG_NETWORK</p>}
-      {decision.kind === "WAITING_FOR_CLIENT" && <p>Waiting for client.</p>}
-      {decision.kind === "WAITING_FOR_PROVIDER" && <p>Waiting for provider.</p>}
-      {decision.kind === "AUTOMATED" && (
-        <p>
-          Verification and settlement continue automatically. No wallet action
-          is required.
-        </p>
-      )}
-      {decision.kind === "TERMINAL" && <p>No wallet action is available.</p>}
-      {prepared?.result === "PREPARED" && (
-        <div className="notice">
-          <h3>Confirm prepared transaction</h3>
-          <p>{prepared.summary}</p>
-          <dl>
-            <dt>Action</dt>
-            <dd>{prepared.action}</dd>
-            <dt>Signer</dt>
-            <dd className="hash">{prepared.requiredSigner}</dd>
-            <dt>Network</dt>
-            <dd>Arc Testnet ({prepared.chainId})</dd>
-            <dt>Contract target</dt>
-            <dd className="hash">{prepared.to}</dd>
-            <dt>Native value</dt>
-            <dd>{prepared.value}</dd>
-            <dt>Expected transition</dt>
-            <dd>{prepared.expectedStateTransition}</dd>
-            <dt>Application balance</dt>
-            <dd>{displayUsdc(prepared.fee.erc20BalanceBaseUnits)}</dd>
-          </dl>
-          <button type="button" onClick={() => void send()} disabled={busy}>
-            Send exact prepared transaction
-          </button>
+        <div className="stack" style={{ gap: "1rem" }}>
+          <div
+            style={{
+              background: "var(--bg-subtle)",
+              padding: "1rem 1.25rem",
+              borderRadius: "var(--radius-md)",
+              border: "1px solid var(--border-subtle)",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "0.5rem",
+                marginBottom: "0.5rem",
+              }}
+            >
+              <span className="badge badge-pending">Action required</span>
+              <span style={{ fontWeight: 600, fontSize: "0.9375rem" }}>
+                {actionTitle(decision.action)}
+              </span>
+            </div>
+            <p style={{ margin: 0, fontSize: "0.875rem" }}>
+              Signer: <code>{wallet.address}</code> (
+              {pact.nextRequiredActor === "CLIENT" ? "Client" : "Provider"}).
+              Preparing this action computes the deterministic transaction
+              payload on Arc Testnet.
+            </p>
+          </div>
+
+          <div className="actions" style={{ margin: 0 }}>
+            <button
+              type="button"
+              onClick={() => void prepare(decision.action)}
+              disabled={busy}
+            >
+              {busy
+                ? "Preparing transaction…"
+                : `Prepare ${actionTitle(decision.action)}`}
+            </button>
+          </div>
         </div>
       )}
+
+      {/* Decision: CONNECT */}
+      {decision.kind === "CONNECT" && (
+        <div className="notice" style={{ margin: 0 }}>
+          <h3 style={{ margin: "0 0 0.35rem 0" }}>
+            Wallet connection required
+          </h3>
+          <p style={{ margin: 0 }}>
+            Connect the required {pact.nextRequiredActor.toLowerCase()} wallet (
+            <code>
+              {pact.nextRequiredActor === "CLIENT"
+                ? pact.client
+                : pact.provider}
+            </code>
+            ) to continue.
+          </p>
+        </div>
+      )}
+
+      {/* Decision: AUTHENTICATE */}
+      {decision.kind === "AUTHENTICATE" && (
+        <div className="notice" style={{ margin: 0 }}>
+          <h3 style={{ margin: "0 0 0.35rem 0" }}>Authentication required</h3>
+          <p style={{ margin: 0 }}>
+            Authenticate the connected wallet via signature challenge before
+            preparing this action.
+          </p>
+        </div>
+      )}
+
+      {/* Decision: WRONG_NETWORK */}
+      {decision.kind === "WRONG_NETWORK" && (
+        <div className="error" style={{ margin: 0 }}>
+          <h3 style={{ margin: "0 0 0.35rem 0" }}>Wrong network</h3>
+          <p style={{ margin: 0 }}>
+            Your wallet must be connected to Arc Testnet (Chain ID 5042002).
+          </p>
+        </div>
+      )}
+
+      {/* Decision: WAITING_FOR_CLIENT */}
+      {decision.kind === "WAITING_FOR_CLIENT" && (
+        <div
+          style={{
+            background: "var(--bg-subtle)",
+            padding: "1.25rem",
+            borderRadius: "var(--radius-md)",
+            border: "1px solid var(--border-subtle)",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "0.5rem",
+              marginBottom: "0.5rem",
+            }}
+          >
+            <span className="badge badge-neutral">Awaiting client</span>
+            <span style={{ fontWeight: 600 }}>
+              Waiting for client signature
+            </span>
+          </div>
+          <p
+            style={{
+              margin: 0,
+              fontSize: "0.875rem",
+              color: "var(--text-secondary)",
+            }}
+          >
+            The assigned client (<code>{pact.client}</code>) must execute{" "}
+            {actionTitle(pact.nextRequiredAction)} before the lifecycle can
+            advance.
+          </p>
+        </div>
+      )}
+
+      {/* Decision: WAITING_FOR_PROVIDER */}
+      {decision.kind === "WAITING_FOR_PROVIDER" && (
+        <div
+          style={{
+            background: "var(--bg-subtle)",
+            padding: "1.25rem",
+            borderRadius: "var(--radius-md)",
+            border: "1px solid var(--border-subtle)",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "0.5rem",
+              marginBottom: "0.5rem",
+            }}
+          >
+            <span className="badge badge-neutral">Awaiting provider</span>
+            <span style={{ fontWeight: 600 }}>
+              Waiting for provider confirmation
+            </span>
+          </div>
+          <p
+            style={{
+              margin: 0,
+              fontSize: "0.875rem",
+              color: "var(--text-secondary)",
+            }}
+          >
+            The assigned provider (<code>{pact.provider}</code>) must confirm
+            the job amount before escrow funding can proceed.
+          </p>
+        </div>
+      )}
+
+      {/* Decision: AUTOMATED */}
+      {decision.kind === "AUTOMATED" && (
+        <div
+          style={{
+            background: "var(--accent-verified-bg)",
+            padding: "1.25rem",
+            borderRadius: "var(--radius-md)",
+            border: "1px solid var(--accent-verified-border)",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "0.5rem",
+              marginBottom: "0.5rem",
+            }}
+          >
+            <span className="badge badge-verified">Automated execution</span>
+            <span style={{ fontWeight: 600, color: "var(--accent-verified)" }}>
+              {pact.status === "AWAITING_CONDITION"
+                ? "Awaiting GitHub merge condition"
+                : pact.status === "VERIFYING"
+                  ? "Verifying outcome on GitHub"
+                  : "Settlement in progress on Arc"}
+            </span>
+          </div>
+          <p
+            style={{
+              margin: 0,
+              fontSize: "0.875rem",
+              color: "var(--text-secondary)",
+            }}
+          >
+            Work has been submitted. Pact is monitoring the repository and will
+            independently verify the merge before settlement. No wallet action
+            is required.
+          </p>
+        </div>
+      )}
+
+      {/* Decision: TERMINAL */}
+      {decision.kind === "TERMINAL" && (
+        <p
+          style={{
+            margin: 0,
+            color: "var(--text-muted)",
+            fontSize: "0.875rem",
+          }}
+        >
+          No wallet action is available. The lifecycle is complete or finalized.
+        </p>
+      )}
+
+      {/* PREPARED TRANSACTION REVIEW SURFACE */}
+      {prepared?.result === "PREPARED" && (
+        <div className="review-surface" style={{ marginTop: "1.25rem" }}>
+          <div className="review-header">
+            <span
+              className="badge badge-pending"
+              style={{ marginBottom: "0.5rem" }}
+            >
+              Review prepared transaction
+            </span>
+            <h3>Confirm onchain parameters</h3>
+            <p className="review-summary">{prepared.summary}</p>
+          </div>
+
+          <div className="review-grid">
+            <div className="review-fact-item">
+              <div className="review-fact-label">Action</div>
+              <div className="review-fact-value">
+                {actionTitle(prepared.action)}
+              </div>
+            </div>
+            <div className="review-fact-item">
+              <div className="review-fact-label">Signer</div>
+              <div className="review-fact-value">
+                <AddressDisplay address={prepared.requiredSigner} />
+              </div>
+            </div>
+            <div className="review-fact-item">
+              <div className="review-fact-label">Network</div>
+              <div className="review-fact-value">
+                Arc Testnet ({prepared.chainId})
+              </div>
+            </div>
+            <div className="review-fact-item">
+              <div className="review-fact-label">Contract Target</div>
+              <div className="review-fact-value">
+                <AddressDisplay address={prepared.to} />
+              </div>
+            </div>
+            <div className="review-fact-item">
+              <div className="review-fact-label">Native Value</div>
+              <div className="review-fact-value">
+                {prepared.value} native wei
+              </div>
+            </div>
+            <div className="review-fact-item">
+              <div className="review-fact-label">Expected State Transition</div>
+              <div className="review-fact-value">
+                {prepared.expectedStateTransition}
+              </div>
+            </div>
+            <div className="review-fact-item">
+              <div className="review-fact-label">Application Balance</div>
+              <div className="review-fact-value">
+                {displayUsdc(prepared.fee.erc20BalanceBaseUnits)}
+              </div>
+            </div>
+          </div>
+
+          <div style={{ margin: "1rem 0" }}>
+            <button
+              type="button"
+              className="ghost btn-sm"
+              onClick={() => setShowTechnicalDetails(!showTechnicalDetails)}
+              style={{ padding: "0.25rem 0.5rem" }}
+            >
+              <Icon
+                name={showTechnicalDetails ? "chevron-down" : "chevron-right"}
+              />
+              <span>
+                {showTechnicalDetails
+                  ? "Hide technical calldata"
+                  : "View technical calldata"}
+              </span>
+            </button>
+            {showTechnicalDetails && (
+              <div
+                style={{
+                  background: "var(--bg-subtle)",
+                  padding: "0.85rem",
+                  borderRadius: "var(--radius-md)",
+                  marginTop: "0.5rem",
+                  fontSize: "0.8125rem",
+                }}
+              >
+                <dl style={{ margin: 0 }}>
+                  <dt>Calldata hash</dt>
+                  <dd>
+                    <HashDisplay hash={prepared.calldataHash} />
+                  </dd>
+                  <dt>Target calldata</dt>
+                  <dd>
+                    <code className="tech-hash">{prepared.data}</code>
+                  </dd>
+                  <dt>Prepared block</dt>
+                  <dd>{prepared.preparedAtBlock}</dd>
+                  <dt>Estimated gas</dt>
+                  <dd>{prepared.estimatedGas}</dd>
+                </dl>
+              </div>
+            )}
+          </div>
+
+          <div className="actions" style={{ margin: "1rem 0 0 0" }}>
+            <button type="button" onClick={() => void send()} disabled={busy}>
+              {busy
+                ? "Requesting wallet signature…"
+                : "Send exact prepared transaction"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* TRANSACTION CONFIRMATION STAGE */}
       {transactionHash !== null && !confirmed && preparedAction !== null && (
-        <div>
-          <p className="hash">Submitted transaction: {transactionHash}</p>
+        <div
+          style={{
+            marginTop: "1.25rem",
+            padding: "1.25rem",
+            background: "var(--bg-subtle)",
+            borderRadius: "var(--radius-md)",
+            border: "1px solid var(--border-default)",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "0.5rem",
+              marginBottom: "0.75rem",
+            }}
+          >
+            <Icon name="refresh-cw" className="rail-icon" />
+            <span style={{ fontWeight: 600 }}>
+              Transaction submitted to network
+            </span>
+          </div>
+          <p style={{ margin: "0 0 0.75rem 0", fontSize: "0.875rem" }}>
+            Hash: <HashDisplay hash={transactionHash} />
+          </p>
+          <p
+            style={{
+              margin: "0 0 1rem 0",
+              fontSize: "0.8125rem",
+              color: "var(--text-secondary)",
+            }}
+          >
+            Awaiting canonical server confirmation. The product state advances
+            only when the transaction is reconciled by the server.
+          </p>
           <button
             type="button"
-            className="secondary"
+            className="secondary btn-sm"
             onClick={() => void confirm(transactionHash, preparedAction)}
             disabled={busy}
           >
-            Retry canonical confirmation
+            {busy ? "Reconciling…" : "Retry canonical confirmation"}
           </button>
         </div>
       )}
-      {notice !== null && <p role="status">{notice}</p>}
-      {error !== null && <ErrorNotice error={error} />}
+
+      {notice !== null && (
+        <div
+          className="success-callout"
+          style={{ marginTop: "1rem" }}
+          role="status"
+        >
+          <p style={{ margin: 0 }}>{notice}</p>
+        </div>
+      )}
+
+      {error !== null && (
+        <div style={{ marginTop: "1rem" }}>
+          <ErrorNotice error={error} />
+        </div>
+      )}
     </section>
   );
 }
@@ -238,33 +609,64 @@ function WalletActionPanel({
 function EvidenceView({ evidence }: { readonly evidence: EvidenceDto | null }) {
   return (
     <section className="card" aria-labelledby="evidence-heading">
-      <h2 id="evidence-heading">Evidence</h2>
+      <div className="card-header">
+        <div className="card-title-group">
+          <h2 id="evidence-heading">Verification artifact</h2>
+          <p className="card-description">
+            Cryptographic proof generated by independent GitHub API inspection.
+          </p>
+        </div>
+        {evidence !== null && (
+          <span className="badge badge-verified">Attestation signed</span>
+        )}
+      </div>
+
       {evidence === null ? (
-        <p>Canonical evidence is not ready.</p>
+        <p style={{ color: "var(--text-muted)", margin: "0.5rem 0" }}>
+          Canonical evidence is not ready. Evidence is generated once the pull
+          request merges.
+        </p>
       ) : (
         <dl>
-          <dt>Condition hash</dt>
-          <dd className="hash">{evidence.conditionHash}</dd>
-          <dt>Evidence hash</dt>
-          <dd className="hash">{evidence.evidenceHash}</dd>
-          <dt>GitHub condition</dt>
+          <dt>Target PR</dt>
           <dd>
-            {evidence.repository}#{evidence.pullRequest} → {evidence.baseBranch}
+            <strong>
+              {evidence.repository}#{evidence.pullRequest}
+            </strong>{" "}
+            → <code>{evidence.baseBranch}</code>
           </dd>
-          <dt>Merge SHA</dt>
-          <dd className="hash">{evidence.mergeCommitSha}</dd>
-          <dt>Merged</dt>
+          <dt>Outcome</dt>
+          <dd>
+            <span className="badge badge-verified">MERGED</span>
+          </dd>
+          <dt>Merge commit SHA</dt>
+          <dd>
+            <HashDisplay hash={evidence.mergeCommitSha} />
+          </dd>
+          <dt>Merged at</dt>
           <dd>{timestamp(evidence.mergedAt)}</dd>
-          <dt>Observed</dt>
+          <dt>Observed at</dt>
           <dd>{timestamp(evidence.observedAt)}</dd>
           <dt>Attestation digest</dt>
-          <dd className="hash">{evidence.attestationDigest}</dd>
+          <dd>
+            <HashDisplay hash={evidence.attestationDigest} />
+          </dd>
           <dt>Verifier</dt>
-          <dd className="hash">{evidence.verifier}</dd>
-          <dt>Verified</dt>
+          <dd>
+            <AddressDisplay address={evidence.verifier} />
+          </dd>
+          <dt>Condition hash</dt>
+          <dd>
+            <HashDisplay hash={evidence.conditionHash} />
+          </dd>
+          <dt>Evidence hash</dt>
+          <dd>
+            <HashDisplay hash={evidence.evidenceHash} />
+          </dd>
+          <dt>Verified timestamp</dt>
           <dd>{timestamp(evidence.verifiedAt)}</dd>
-          <dt>Valid until</dt>
-          <dd>{timestamp(evidence.validUntil)}</dd>
+          <dt>Validity window</dt>
+          <dd>Valid until {timestamp(evidence.validUntil)}</dd>
         </dl>
       )}
     </section>
@@ -278,43 +680,58 @@ function SettlementView({
 }) {
   return (
     <section className="card" aria-labelledby="settlement-heading">
-      <h2 id="settlement-heading">Settlement</h2>
+      <div className="card-header">
+        <div className="card-title-group">
+          <h2 id="settlement-heading">Settlement receipt</h2>
+          <p className="card-description">
+            Authoritative onchain ERC-8183 completion record on Arc.
+          </p>
+        </div>
+        {settlement !== null && (
+          <span className="badge badge-verified">Settled</span>
+        )}
+      </div>
+
       {settlement === null ? (
-        <p>Canonical settlement is not ready.</p>
+        <p style={{ color: "var(--text-muted)", margin: "0.5rem 0" }}>
+          Canonical settlement is not ready. Funds remain locked in escrow until
+          verified.
+        </p>
       ) : (
         <dl>
-          <dt>Job</dt>
-          <dd>{settlement.jobId}</dd>
-          <dt>Job key</dt>
-          <dd className="hash">{settlement.jobKey}</dd>
-          <dt>Chain</dt>
-          <dd>{settlement.chainId}</dd>
-          <dt>Commerce</dt>
-          <dd className="hash">{settlement.commerce}</dd>
-          <dt>Evaluator</dt>
-          <dd className="hash">{settlement.evaluator}</dd>
-          <dt>Transaction</dt>
-          <dd className="hash">{settlement.transactionHash}</dd>
-          <dt>Receipt block</dt>
-          <dd>{settlement.receiptBlockNumber}</dd>
-          <dt>Final job state</dt>
-          <dd>{settlement.finalJobStatus}</dd>
-          <dt>Binding accepted</dt>
-          <dd>{settlement.bindingAccepted ? "Yes" : "No"}</dd>
-          <dt>Broadcast attempts</dt>
-          <dd>{settlement.broadcastAttemptCount}</dd>
-          <dt>Budget</dt>
-          <dd>{displayUsdc(settlement.grossBudget)}</dd>
+          <dt>Settlement state</dt>
+          <dd>
+            <span className="badge badge-verified">{settlement.state}</span>
+          </dd>
           <dt>Provider payout</dt>
-          <dd>{displayUsdc(settlement.grossProviderPayout)}</dd>
-          <dt>Treasury application payout</dt>
+          <dd>
+            <strong>{displayUsdc(settlement.grossProviderPayout)}</strong>{" "}
+            <span style={{ color: "var(--text-muted)", fontSize: "0.8125rem" }}>
+              ({settlement.grossProviderPayout} base units)
+            </span>
+          </dd>
+          <dt>Treasury payout</dt>
           <dd>{displayUsdc(settlement.treasuryApplicationPayout)}</dd>
-          <dt>Evaluator application payout</dt>
+          <dt>Evaluator payout</dt>
           <dd>{displayUsdc(settlement.evaluatorApplicationPayout)}</dd>
+          <dt>Settlement tx</dt>
+          <dd>
+            <HashDisplay hash={settlement.transactionHash} />
+          </dd>
+          <dt>Receipt block</dt>
+          <dd>Block #{settlement.receiptBlockNumber}</dd>
+          <dt>ERC-8183 job ID</dt>
+          <dd>#{settlement.jobId}</dd>
+          <dt>Final job status</dt>
+          <dd>Status {settlement.finalJobStatus} (Completed)</dd>
+          <dt>Pact binding</dt>
+          <dd>{settlement.bindingAccepted ? "Accepted" : "Rejected"}</dd>
+          <dt>Broadcast count</dt>
+          <dd>{settlement.broadcastAttemptCount} relay attempt(s)</dd>
           <dt>Evidence hash</dt>
-          <dd className="hash">{settlement.evidenceHash}</dd>
-          <dt>Completion reason</dt>
-          <dd className="hash">{settlement.completionReason}</dd>
+          <dd>
+            <HashDisplay hash={settlement.evidenceHash} />
+          </dd>
         </dl>
       )}
     </section>
@@ -328,6 +745,7 @@ export function PactDetail({ slug }: { readonly slug: string }) {
   const [settlement, setSettlement] = useState<SettlementDto | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [retrying, setRetrying] = useState(false);
+  const [showTechnicalDetails, setShowTechnicalDetails] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -409,70 +827,216 @@ export function PactDetail({ slug }: { readonly slug: string }) {
 
   if (pact === null) {
     return (
-      <>
+      <div className="stack" style={{ gap: "1.5rem" }}>
         <WalletControls />
-        <p role="status">Loading canonical Pact state…</p>
+        <section
+          className="card"
+          style={{ padding: "3rem 2rem", textAlign: "center" }}
+        >
+          <p
+            role="status"
+            style={{
+              fontSize: "1.1rem",
+              color: "var(--text-secondary)",
+              margin: 0,
+            }}
+          >
+            Loading canonical Pact state…
+          </p>
+        </section>
         {error !== null && <ErrorNotice error={error} />}
-      </>
+      </div>
     );
   }
 
   return (
-    <>
+    <div className="stack" style={{ gap: "2rem" }}>
+      {/* Top Workspace Header */}
+      <div>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "0.5rem",
+            marginBottom: "0.5rem",
+          }}
+        >
+          <span className="eyebrow" style={{ margin: 0 }}>
+            Pact Workspace
+          </span>
+          <span style={{ color: "var(--border-strong)" }}>/</span>
+          <span className="tech-address-wrapper">
+            <code className="tech-hash">{pact.slug}</code>
+            <CopyButton text={pact.slug} label="Copy slug" />
+          </span>
+        </div>
+
+        <div
+          style={{
+            display: "flex",
+            alignItems: "flex-start",
+            justifyContent: "space-between",
+            flexWrap: "wrap",
+            gap: "1rem",
+            marginBottom: "1rem",
+          }}
+        >
+          <div>
+            <h1 style={{ margin: "0 0 0.5rem 0" }}>
+              {pact.repository}#{pact.pullRequest}
+            </h1>
+            <p className="lede" style={{ margin: 0 }}>
+              Settle {displayUsdc(pact.amountBaseUnits)} upon verified merge
+              into <code>{pact.baseBranch}</code>.
+            </p>
+          </div>
+          <div
+            style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}
+          >
+            <StatusBadge status={pact.status} />
+            <NetworkBadge network={pact.network} chainId={pact.chainId} />
+          </div>
+        </div>
+
+        {/* Highlights Bar */}
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(13rem, 1fr))",
+            gap: "1rem",
+            padding: "1rem 1.25rem",
+            background: "var(--bg-surface)",
+            border: "1px solid var(--border-default)",
+            borderRadius: "var(--radius-lg)",
+            boxShadow: "var(--shadow-xs)",
+          }}
+        >
+          <div>
+            <div className="review-fact-label">Escrow Amount</div>
+            <div
+              style={{
+                fontSize: "1.15rem",
+                fontWeight: 700,
+                color: "var(--text-primary)",
+              }}
+            >
+              {displayUsdc(pact.amountBaseUnits)}
+            </div>
+            <div style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
+              {pact.amountBaseUnits} base units
+            </div>
+          </div>
+          <div>
+            <div className="review-fact-label">Next Actor</div>
+            <div style={{ marginTop: "0.25rem" }}>
+              <ActorBadge actor={pact.nextRequiredActor} />
+            </div>
+          </div>
+          <div>
+            <div className="review-fact-label">Next Action</div>
+            <div
+              style={{
+                fontSize: "0.9375rem",
+                fontWeight: 600,
+                color: "var(--text-primary)",
+              }}
+            >
+              {actionTitle(pact.nextRequiredAction)}
+            </div>
+          </div>
+          <div>
+            <div className="review-fact-label">Assigned Provider</div>
+            <div style={{ marginTop: "0.25rem" }}>
+              <AddressDisplay address={pact.provider} />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Execution Rail */}
+      <div>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+          }}
+        >
+          <span className="eyebrow" style={{ margin: 0 }}>
+            Settlement Lifecycle
+          </span>
+          <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
+            ERC-8183 Deterministic State
+          </span>
+        </div>
+        <ExecutionRail pact={pact} />
+      </div>
+
+      {/* Wallet Controls & Main Action Panel */}
       <div className="grid">
         <WalletControls />
-        <section className="card" aria-labelledby="pact-summary-heading">
-          <h2 id="pact-summary-heading">Pact state</h2>
-          <p className="status" role="status">
-            {pact.status}
-          </p>
-          <dl>
-            <dt>Condition</dt>
-            <dd>
-              {pact.repository}#{pact.pullRequest} → {pact.baseBranch}
-            </dd>
-            <dt>Amount</dt>
-            <dd>{displayUsdc(pact.amountBaseUnits)}</dd>
-            <dt>Client</dt>
-            <dd className="hash">{pact.client}</dd>
-            <dt>Provider</dt>
-            <dd className="hash">{pact.provider}</dd>
-            <dt>Chain</dt>
-            <dd>{pact.chainId} / Arc Testnet</dd>
-            <dt>Condition hash</dt>
-            <dd className="hash">{pact.conditionHash}</dd>
-            <dt>Job ID</dt>
-            <dd>{pact.jobId ?? "Not linked"}</dd>
-            <dt>Job key</dt>
-            <dd className="hash">{pact.jobKey ?? "Not linked"}</dd>
-            <dt>Completion deadline</dt>
-            <dd>{timestamp(pact.completionDeadline)}</dd>
-            <dt>Expiry</dt>
-            <dd>{timestamp(pact.expiry)}</dd>
-            <dt>Next actor</dt>
-            <dd>{pact.nextRequiredActor}</dd>
-            <dt>Next action</dt>
-            <dd>{pact.nextRequiredAction}</dd>
-          </dl>
-        </section>
+        <WalletActionPanel pact={pact} refresh={refresh} />
       </div>
-      <WalletActionPanel pact={pact} refresh={refresh} />
+
+      {/* Retry Verification (Secondary action only when permitted) */}
       {retryAllowed && (
-        <section className="card">
-          <h2>Verification</h2>
+        <section
+          className="card"
+          style={{
+            background: "var(--bg-subtle)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            flexWrap: "wrap",
+            gap: "1rem",
+            padding: "1.25rem 1.5rem",
+          }}
+        >
+          <div>
+            <h3 style={{ margin: "0 0 0.25rem 0", fontSize: "1rem" }}>
+              Manual verification check
+            </h3>
+            <p
+              style={{
+                margin: 0,
+                fontSize: "0.875rem",
+                color: "var(--text-secondary)",
+              }}
+            >
+              Trigger an immediate check against GitHub authoritative API
+              without waiting for the polling worker.
+            </p>
+          </div>
           <button
             type="button"
+            className="secondary btn-sm"
             onClick={() => void retry()}
             disabled={retrying}
           >
-            Retry verification
+            {retrying ? "Checking GitHub…" : "Trigger verification check"}
           </button>
         </section>
       )}
+
+      {/* Wallet Action History Table */}
       <section className="card" aria-labelledby="history-heading">
-        <h2 id="history-heading">Wallet action history</h2>
+        <div className="card-header">
+          <div className="card-title-group">
+            <h2 id="history-heading">Confirmed wallet actions</h2>
+            <p className="card-description">
+              Authoritative onchain transaction history for this Pact.
+            </p>
+          </div>
+          <span className="badge badge-neutral">
+            {pact.walletActions.length} / 6 actions
+          </span>
+        </div>
+
         {pact.walletActions.length === 0 ? (
-          <p>No wallet actions are confirmed yet.</p>
+          <p style={{ color: "var(--text-muted)", margin: "0.5rem 0" }}>
+            No onchain actions are confirmed yet. Client must create the onchain
+            job.
+          </p>
         ) : (
           <div className="table-scroll">
             <table>
@@ -487,11 +1051,34 @@ export function PactDetail({ slug }: { readonly slug: string }) {
               <tbody>
                 {pact.walletActions.map((action) => (
                   <tr key={action.action}>
-                    <td>{action.action}</td>
-                    <td className="hash">{action.requiredSigner}</td>
-                    <td>{action.confirmationStatus}</td>
-                    <td className="hash">
-                      {action.transactionHash ?? "No transaction required"}
+                    <td>
+                      <strong>{actionTitle(action.action)}</strong>
+                      <div
+                        style={{
+                          fontSize: "0.75rem",
+                          color: "var(--text-muted)",
+                        }}
+                      >
+                        {action.action}
+                      </div>
+                    </td>
+                    <td>
+                      <AddressDisplay address={action.requiredSigner} />
+                    </td>
+                    <td>
+                      <span className="badge badge-verified">
+                        <span className="badge-dot" />
+                        {action.confirmationStatus}
+                      </span>
+                    </td>
+                    <td>
+                      {action.transactionHash ? (
+                        <HashDisplay hash={action.transactionHash} />
+                      ) : (
+                        <span style={{ color: "var(--text-muted)" }}>
+                          None required
+                        </span>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -500,11 +1087,102 @@ export function PactDetail({ slug }: { readonly slug: string }) {
           </div>
         )}
       </section>
+
+      {/* Evidence & Settlement Grid */}
       <div className="grid">
         <EvidenceView evidence={evidence} />
         <SettlementView settlement={settlement} />
       </div>
+
+      {/* Technical Protocol Metadata Accordion / Panel */}
+      <section className="card">
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            cursor: "pointer",
+          }}
+          onClick={() => setShowTechnicalDetails(!showTechnicalDetails)}
+        >
+          <div>
+            <h2 style={{ fontSize: "1.1rem", margin: 0 }}>
+              Technical protocol specifications
+            </h2>
+            <p
+              style={{
+                margin: "0.25rem 0 0 0",
+                fontSize: "0.8125rem",
+                color: "var(--text-secondary)",
+              }}
+            >
+              Deterministic hashes, contract targets, and deadline policies.
+            </p>
+          </div>
+          <button
+            type="button"
+            className="ghost btn-sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowTechnicalDetails(!showTechnicalDetails);
+            }}
+          >
+            <Icon
+              name={showTechnicalDetails ? "chevron-down" : "chevron-right"}
+            />
+            <span>{showTechnicalDetails ? "Collapse" : "Expand"}</span>
+          </button>
+        </div>
+
+        {showTechnicalDetails && (
+          <div
+            style={{
+              borderTop: "1px solid var(--border-subtle)",
+              marginTop: "1rem",
+              paddingTop: "1rem",
+            }}
+          >
+            <dl>
+              <dt>Client address</dt>
+              <dd>
+                <AddressDisplay address={pact.client} />
+              </dd>
+              <dt>Provider address</dt>
+              <dd>
+                <AddressDisplay address={pact.provider} />
+              </dd>
+              <dt>Condition hash</dt>
+              <dd>
+                <HashDisplay hash={pact.conditionHash} />
+              </dd>
+              <dt>Job ID</dt>
+              <dd>{pact.jobId ?? "Not linked"}</dd>
+              <dt>Job key</dt>
+              <dd>
+                {pact.jobKey ? (
+                  <HashDisplay hash={pact.jobKey} />
+                ) : (
+                  "Not linked"
+                )}
+              </dd>
+              <dt>Commerce contract</dt>
+              <dd>
+                <AddressDisplay address={pact.commerceAddress} />
+              </dd>
+              <dt>Evaluator contract</dt>
+              <dd>
+                <AddressDisplay address={pact.evaluatorAddress} />
+              </dd>
+              <dt>Completion deadline</dt>
+              <dd>{timestamp(pact.completionDeadline)}</dd>
+              <dt>Escrow expiry</dt>
+              <dd>{timestamp(pact.expiry)}</dd>
+            </dl>
+          </div>
+        )}
+      </section>
+
       {error !== null && <ErrorNotice error={error} />}
-    </>
+    </div>
   );
 }

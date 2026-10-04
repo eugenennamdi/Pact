@@ -9,8 +9,6 @@ export default async function PactPage({
   const { slug } = await params;
   return (
     <main className="page">
-      <p className="eyebrow">Interactive Arc Testnet product</p>
-      <h1>Pact detail</h1>
       <WalletBoundary>
         <PactDetail slug={slug} />
       </WalletBoundary>
