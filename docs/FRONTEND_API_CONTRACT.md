@@ -37,6 +37,21 @@ the browser may request the wallet to send: `chainId`, `requiredSigner`, `to`,
 `value`, and `data`, plus its human-readable summary and canonical transition.
 Confirmation, not wallet submission, determines product success.
 
+The public DTO and route values have a one-to-one mapping, in lifecycle order:
+
+| Public DTO action | Route action     | Actor    |
+| ----------------- | ---------------- | -------- |
+| `CREATE_JOB`      | `create-job`     | Client   |
+| `BIND_CONDITION`  | `bind-condition` | Client   |
+| `SET_BUDGET`      | `set-budget`     | Provider |
+| `APPROVE_USDC`    | `approve-usdc`   | Client   |
+| `FUND`            | `fund`           | Client   |
+| `SUBMIT`          | `submit`         | Provider |
+
+`SET_PROVIDER`, `RECLAIM`, and arbitrary action strings are unsupported. After
+`SUBMIT`, the public state advances to `AWAITING_CONDITION`; verification and
+settlement are automatic and expose no wallet action.
+
 ## Automation and public proof
 
 - `POST /pacts/{slug}/retry` — strict empty body; wakes verification only.

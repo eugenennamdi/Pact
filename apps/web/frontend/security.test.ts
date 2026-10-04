@@ -7,7 +7,10 @@ import type {
 } from "../../../packages/product/src/public-contract";
 import { decidePactAction } from "./action-controller";
 import { authenticateWallet, isBrowserSessionValid } from "./auth-flow";
-import { createProductApiClient } from "./product-client";
+import {
+  createProductApiClient,
+  publicWalletActionPaths,
+} from "./product-client";
 import {
   prepareActionForWallet,
   sendPreparedTransaction,
@@ -388,6 +391,91 @@ describe("browser wallet security boundary", () => {
       }),
     ).toEqual({ kind: "WAITING_FOR_CLIENT" });
   });
+
+  it("exposes exactly the canonical six wallet actions", () => {
+    expect(publicWalletActionPaths).toEqual([
+      "create-job",
+      "bind-condition",
+      "set-budget",
+      "approve-usdc",
+      "fund",
+      "submit",
+    ]);
+  });
+
+  it.each(["set-provider", "reclaim", "arbitrary-action"])(
+    "rejects unsupported frontend action %s",
+    async (action) => {
+      const fetchImplementation = vi.fn();
+      const client = createProductApiClient(fetchImplementation);
+      expect(() =>
+        client.prepareAction(
+          `pact_${"a".repeat(32)}`,
+          action as never,
+          "prepare:unsupported",
+        ),
+      ).toThrow("UNSUPPORTED_WALLET_ACTION");
+      expect(fetchImplementation).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ["SET_BUDGET", "PROVIDER", CLIENT, "WAITING_FOR_PROVIDER"],
+    ["APPROVE_USDC", "CLIENT", PROVIDER, "WAITING_FOR_CLIENT"],
+  ] as const)(
+    "gives the wrong actor no CTA for %s",
+    (action, actor, walletAddress, expected) => {
+      expect(
+        decidePactAction({
+          pact: pact({
+            next: { actor, action },
+            nextRequiredActor: actor,
+            nextRequiredAction: action,
+          }),
+          walletAddress,
+          walletChainId: ARC_TESTNET_CHAIN_ID,
+          authenticated: true,
+        }),
+      ).toEqual({ kind: expected });
+    },
+  );
+
+  it("offers only the server-projected next action, blocking out-of-order CTAs", () => {
+    expect(
+      decidePactAction({
+        pact: pact({
+          next: { actor: "CLIENT", action: "BIND_CONDITION" },
+          nextRequiredActor: "CLIENT",
+          nextRequiredAction: "BIND_CONDITION",
+        }),
+        walletAddress: CLIENT,
+        walletChainId: ARC_TESTNET_CHAIN_ID,
+        authenticated: true,
+      }),
+    ).toEqual({
+      kind: "READY",
+      action: "bind-condition",
+      label: "BIND CONDITION",
+    });
+  });
+
+  it.each(["SET_PROVIDER", "RECLAIM", "MANUFACTURED_ACTION"])(
+    "fails closed when a non-contract DTO action is presented: %s",
+    (action) => {
+      expect(
+        decidePactAction({
+          pact: pact({
+            next: { actor: "CLIENT", action: action as never },
+            nextRequiredActor: "CLIENT",
+            nextRequiredAction: action as never,
+          }),
+          walletAddress: CLIENT,
+          walletChainId: ARC_TESTNET_CHAIN_ID,
+          authenticated: true,
+        }),
+      ).toEqual({ kind: "TERMINAL" });
+    },
+  );
 
   it("exposes no arbitrary transaction fields through prepare requests", async () => {
     const requests: RequestInit[] = [];

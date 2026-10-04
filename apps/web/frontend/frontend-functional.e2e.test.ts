@@ -154,10 +154,13 @@ const settlement: SettlementDto = {
 };
 
 describe("frontend functional product integration", () => {
-  it("connects, authenticates, completes wallet actions, then renders canonical progression", async () => {
+  it("completes CREATE_JOB, BIND_CONDITION, SET_BUDGET, APPROVE_USDC, FUND, and SUBMIT before automatic settlement", async () => {
     let confirmedActions = 0;
     let publicRead = 0;
     const requests: string[] = [];
+    const preparedActions: string[] = [];
+    const sentActions: string[] = [];
+    const confirmedActionKinds: string[] = [];
     const fetchImplementation = async (
       input: string | URL | Request,
       init?: RequestInit,
@@ -228,6 +231,7 @@ describe("frontend functional product integration", () => {
       const prepareMatch = /\/actions\/([^/]+)\/prepare$/.exec(path);
       if (prepareMatch !== null) {
         const action = prepareMatch[1] as PublicWalletActionPath;
+        preparedActions.push(action);
         const result: PrepareActionDto = {
           result: "PREPARED",
           replayed: false,
@@ -259,6 +263,7 @@ describe("frontend functional product integration", () => {
       }
       if (/\/actions\/[^/]+\/confirm$/.test(path)) {
         const action = kinds[confirmedActions] ?? "SUBMIT";
+        confirmedActionKinds.push(action);
         confirmedActions += 1;
         return Response.json({
           replayed: false,
@@ -336,6 +341,7 @@ describe("frontend functional product integration", () => {
         walletAddress: connection.address,
         prepared,
       });
+      sentActions.push(action);
       const confirmation = await confirmWalletTransaction({
         client: api,
         slug: SLUG,
@@ -345,6 +351,9 @@ describe("frontend functional product integration", () => {
       expect(confirmation.confirmationStatus).toBe("CONFIRMED");
     }
     expect(confirmedActions).toBe(6);
+    expect(preparedActions).toEqual(actions);
+    expect(sentActions).toEqual(actions);
+    expect(confirmedActionKinds).toEqual(kinds);
     await expect(api.getPact(SLUG)).resolves.toMatchObject({
       status: "AWAITING_CONDITION",
     });

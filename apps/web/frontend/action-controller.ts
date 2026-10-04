@@ -63,6 +63,7 @@ export function decidePactAction(input: {
     };
   }
   if (!input.authenticated) return { kind: "AUTHENTICATE" };
+  if (!(pact.nextRequiredAction in actionPaths)) return { kind: "TERMINAL" };
   const action = actionPaths[pact.nextRequiredAction];
   return {
     kind: "READY",

@@ -21,5 +21,19 @@ Stable integration surfaces:
 - `PactDetail` — public polling, action history, evidence and settlement.
 - `MainnetLiveConfirmation` — read-only proof enhancement; never a wallet flow.
 
+The wallet lifecycle and actor ownership are frozen, in this exact order:
+
+1. Client: `CREATE_JOB`
+2. Client: `BIND_CONDITION`
+3. Provider: `SET_BUDGET`
+4. Client: `APPROVE_USDC`
+5. Client: `FUND`
+6. Provider: `SUBMIT`
+7. Automatic: verification and settlement
+
+There is no interactive `SET_PROVIDER` or `RECLAIM` action. Gemini must not add,
+alias, reorder, or rename wallet actions, and must not expose a wallet
+settlement CTA after `SUBMIT`.
+
 Functional routes are `/`, `/create`, `/pacts/[slug]`, and
 `/proof/arc-mainnet/job/1`.
