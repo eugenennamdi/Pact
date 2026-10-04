@@ -13,7 +13,7 @@
   },
   "scripts": {
     "build": "tsc",
-    "prepare": "npm run build",
+    "prepare": "npm run build --workspace=@pact/protocol && npm run build --workspace=@pact/verifier && npm run build --workspace=@pact/database && npm run build --workspace=@pact/orchestrator && npm run build",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
