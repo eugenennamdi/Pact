@@ -1,5 +1,5 @@
 import type { GitHubPullRequestClient } from "@pact/verifier/github";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { getAddress } from "viem";
 import type { ProductConfig } from "./config";
 import {
@@ -11,11 +11,13 @@ import {
   handleReadEvidence,
   handleReadPact,
   handleReadSettlement,
+  handleRetryPact,
   type ProductRuntime,
 } from "./http";
 import { InMemoryRateLimiter } from "./rate-limit";
 import { InMemoryProductRepository } from "./repository";
 import { createSessionToken, serializeSessionCookie } from "./session";
+import type { ProductRepository } from "./types";
 
 const WALLET = getAddress("0x1111111111111111111111111111111111111111");
 const PROVIDER = getAddress("0x2222222222222222222222222222222222222222");
@@ -54,7 +56,9 @@ const github: GitHubPullRequestClient = {
   },
 };
 
-function runtime(repository = new InMemoryProductRepository()): ProductRuntime {
+function runtime(
+  repository: ProductRepository = new InMemoryProductRepository(),
+): ProductRuntime {
   return {
     config,
     repository,
@@ -302,5 +306,106 @@ describe("product draft and public read HTTP", () => {
         body.publicSlug,
       ),
     ).toMatchObject({ status: 404 });
+  });
+});
+
+describe("public manual retry wake-up", () => {
+  async function linkedRuntime() {
+    const base = new InMemoryProductRepository();
+    const automation = {
+      ensureScheduled: async () => undefined,
+      wake: vi.fn(async () => ({ replayed: false })),
+    };
+    const repository = new Proxy(base, {
+      get(target, property, receiver) {
+        if (property === "getDraftBySlug") {
+          return async (slug: string) => {
+            const draft = await target.getDraftBySlug(slug);
+            return draft === undefined
+              ? undefined
+              : {
+                  ...draft,
+                  linkedPactRecordId: "11111111-1111-4111-8111-111111111111",
+                  lifecycle: "LINKED" as const,
+                };
+          };
+        }
+        const value = Reflect.get(target, property, receiver) as unknown;
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    }) as ProductRepository;
+    const productRuntime = { ...runtime(repository), automation };
+    const create = jsonRequest(
+      "/api/v1/pacts",
+      {
+        repository: "example/repo",
+        pullRequest: 7,
+        provider: PROVIDER,
+        amount: "0.10",
+      },
+      { cookie: sessionCookie() },
+    );
+    create.headers.set("idempotency-key", "retry-draft-key-01");
+    const created = await handleCreateDraft(create, productRuntime);
+    const body = (await created.json()) as { publicSlug: string };
+    return { productRuntime, automation, slug: body.publicSlug };
+  }
+
+  it("allows the client to enqueue only a scheduler wake-up", async () => {
+    const { productRuntime, automation, slug } = await linkedRuntime();
+    const request = jsonRequest(
+      `/api/v1/pacts/${slug}/retry`,
+      {},
+      { cookie: sessionCookie() },
+    );
+    request.headers.set("idempotency-key", "retry-wake-key-0001");
+    const response = await handleRetryPact(request, productRuntime, slug);
+    expect(response.status).toBe(202);
+    await expect(response.json()).resolves.toEqual({
+      status: "QUEUED",
+      replayed: false,
+    });
+    expect(automation.wake).toHaveBeenCalledWith(
+      expect.any(String),
+      "11111111-1111-4111-8111-111111111111",
+      "retry-wake-key-0001",
+    );
+  });
+
+  it("returns the durable idempotent replay result without running a worker", async () => {
+    const { productRuntime, automation, slug } = await linkedRuntime();
+    automation.wake.mockResolvedValueOnce({ replayed: true });
+    const request = jsonRequest(
+      `/api/v1/pacts/${slug}/retry`,
+      {},
+      { cookie: sessionCookie() },
+    );
+    request.headers.set("idempotency-key", "retry-wake-replay-0001");
+    const response = await handleRetryPact(request, productRuntime, slug);
+    expect(response.status).toBe(202);
+    await expect(response.json()).resolves.toEqual({
+      status: "QUEUED",
+      replayed: true,
+    });
+    expect(automation.wake).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    ["target", "0x3333333333333333333333333333333333333333"],
+    ["calldata", "0x1234"],
+    ["nonce", 1],
+    ["signature", `0x${"11".repeat(65)}`],
+    ["attestation", {}],
+  ])("rejects retry field %s", async (key, value) => {
+    const { productRuntime, automation, slug } = await linkedRuntime();
+    const request = jsonRequest(
+      `/api/v1/pacts/${slug}/retry`,
+      { [key]: value },
+      { cookie: sessionCookie() },
+    );
+    request.headers.set("idempotency-key", "retry-wake-key-0002");
+    const response = await handleRetryPact(request, productRuntime, slug);
+    expect(response.status).toBe(400);
+    expect(automation.wake).not.toHaveBeenCalled();
   });
 });

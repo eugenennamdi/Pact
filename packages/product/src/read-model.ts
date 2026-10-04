@@ -46,15 +46,43 @@ export interface PublicPactDto {
     readonly preparationExpiresAt: string;
   }[];
   readonly evidence: {
+    readonly conditionHash: string;
     readonly evidenceHash: string;
+    readonly repository: string;
+    readonly pullRequest: number;
+    readonly baseBranch: string;
     readonly mergeCommitSha: string;
     readonly mergedAt: string;
     readonly observedAt: string;
+    readonly attestationDigest: string;
+    readonly verifier: Address;
+    readonly satisfiedAt: string;
+    readonly verifiedAt: string;
+    readonly validUntil: string;
   } | null;
   readonly settlement: {
+    readonly jobId: string;
+    readonly jobKey: string;
+    readonly chainId: number;
+    readonly commerce: Address;
+    readonly evaluator: Address;
     readonly transactionHash: string;
     readonly state: "SETTLED" | "SETTLED_EXTERNALLY";
-    readonly blockNumber: string | null;
+    readonly receiptBlockNumber: string;
+    readonly receiptBlockHash: string;
+    readonly receiptTransactionIndex: number;
+    readonly eventBlockNumber: string;
+    readonly eventBlockHash: string;
+    readonly eventLogIndex: number;
+    readonly finalJobStatus: number;
+    readonly bindingAccepted: boolean;
+    readonly broadcastAttemptCount: number;
+    readonly grossBudget: string;
+    readonly grossProviderPayout: string;
+    readonly treasuryApplicationPayout: string;
+    readonly evaluatorApplicationPayout: string;
+    readonly evidenceHash: string;
+    readonly completionReason: string;
   } | null;
 }
 
@@ -65,9 +93,11 @@ const VERIFYING_STATES = new Set([
   "RECONCILING_CHAIN",
   "READY_TO_SIGN",
   "SIGNING",
+  "INDETERMINATE",
+  "CHAIN_RETRYABLE",
 ]);
 const ATTENTION_STATES = new Set([
-  "INDETERMINATE",
+  "NOT_SATISFIED_TERMINAL",
   "CHAIN_INVALID",
   "FAILED_DEFINITE",
 ]);
@@ -111,8 +141,8 @@ export function projectPublicStatus(
   }
   if (input.chainJobStatus === 4) return "NEEDS_ATTENTION";
   if (
-    input.relayState !== null &&
-    SETTLING_RELAY_STATES.has(input.relayState)
+    input.operationState === "READY_TO_RELAY" ||
+    (input.relayState !== null && SETTLING_RELAY_STATES.has(input.relayState))
   ) {
     return "SETTLING";
   }
@@ -239,18 +269,49 @@ export function toPublicPactDto(input: ProductProjectionInput): PublicPactDto {
       input.evidence === null
         ? null
         : {
+            conditionHash: input.evidence.conditionHash,
             evidenceHash: input.evidence.evidenceHash,
+            repository: input.evidence.repository,
+            pullRequest: input.evidence.pullRequest,
+            baseBranch: input.evidence.baseBranch,
             mergeCommitSha: input.evidence.mergeCommitSha,
             mergedAt: input.evidence.mergedAt.toString(),
             observedAt: input.evidence.observedAt.toString(),
+            attestationDigest: input.evidence.attestationDigest,
+            verifier: input.evidence.verifier,
+            satisfiedAt: input.evidence.satisfiedAt.toString(),
+            verifiedAt: input.evidence.verifiedAt.toString(),
+            validUntil: input.evidence.validUntil.toString(),
           },
     settlement:
       input.settlement === null
         ? null
         : {
+            jobId: input.settlement.jobId.toString(),
+            jobKey: input.settlement.jobKey,
+            chainId: Number(input.settlement.chainId),
+            commerce: input.settlement.commerce,
+            evaluator: input.settlement.evaluator,
             transactionHash: input.settlement.transactionHash,
             state: input.settlement.state,
-            blockNumber: input.settlement.blockNumber?.toString() ?? null,
+            receiptBlockNumber: input.settlement.receiptBlockNumber.toString(),
+            receiptBlockHash: input.settlement.receiptBlockHash,
+            receiptTransactionIndex: input.settlement.receiptTransactionIndex,
+            eventBlockNumber: input.settlement.eventBlockNumber.toString(),
+            eventBlockHash: input.settlement.eventBlockHash,
+            eventLogIndex: input.settlement.eventLogIndex,
+            finalJobStatus: input.settlement.finalJobStatus,
+            bindingAccepted: input.settlement.bindingAccepted,
+            broadcastAttemptCount: input.settlement.broadcastAttemptCount,
+            grossBudget: input.settlement.grossBudget.toString(),
+            grossProviderPayout:
+              input.settlement.grossProviderPayout.toString(),
+            treasuryApplicationPayout:
+              input.settlement.treasuryApplicationPayout.toString(),
+            evaluatorApplicationPayout:
+              input.settlement.evaluatorApplicationPayout.toString(),
+            evidenceHash: input.settlement.evidenceHash,
+            completionReason: input.settlement.completionReason,
           },
   });
 }

@@ -22,8 +22,9 @@ import {
   readPublicPact,
   readPublicSettlement,
   type CreateDraftRequest,
+  validateIdempotencyKey,
 } from "./service";
-import type { ProductRepository } from "./types";
+import type { ProductAutomationRepository, ProductRepository } from "./types";
 import type { ProductChainClient } from "./wallet-chain";
 import { confirmWalletAction, prepareWalletAction } from "./wallet-lifecycle";
 
@@ -37,6 +38,7 @@ export interface ProductRuntime {
   readonly recoverAddress?: RecoverMessageAddress;
   readonly chain?: ProductChainClient;
   readonly registrar?: CanonicalPactRegistrar;
+  readonly automation?: ProductAutomationRepository;
 }
 
 function json(data: unknown, status = 200, headers?: HeadersInit): Response {
@@ -362,6 +364,9 @@ export async function handlePrepareWalletAction(
         github: runtime.github,
         chain: walletRuntime.chain,
         registrar: walletRuntime.registrar,
+        ...(runtime.automation === undefined
+          ? {}
+          : { automation: runtime.automation }),
       },
       slug,
       actionPath: action,
@@ -401,6 +406,9 @@ export async function handleConfirmWalletAction(
           github: runtime.github,
           chain: walletRuntime.chain,
           registrar: walletRuntime.registrar,
+          ...(runtime.automation === undefined
+            ? {}
+            : { automation: runtime.automation }),
         },
         slug,
         actionPath: action,
@@ -408,6 +416,48 @@ export async function handleConfirmWalletAction(
         transactionHash: body.transactionHash,
       }),
     );
+  } catch (error) {
+    return errorResponse(error);
+  }
+}
+
+export async function handleRetryPact(
+  request: Request,
+  runtime: ProductRuntime,
+  slug: string,
+): Promise<Response> {
+  try {
+    requireOrigin(request, runtime.config);
+    const session = requireSession(request, runtime.config);
+    const limited = applyRateLimit(
+      runtime,
+      request,
+      "MANUAL_RETRY",
+      `${session.walletAddress}:${slug}`,
+    );
+    if (limited !== undefined) return limited;
+    await parseStrictJson(request, []);
+    const idempotencyKey = validateIdempotencyKey(
+      request.headers.get("idempotency-key"),
+    );
+    const draft = await runtime.repository.getDraftBySlug(slug);
+    if (draft === undefined) throw new ProductError("PACT_NOT_FOUND", 404);
+    if (
+      session.walletAddress !== draft.creatingWallet &&
+      session.walletAddress !== draft.providerAddress
+    ) {
+      throw new ProductError("RETRY_NOT_AUTHORIZED", 403);
+    }
+    if (draft.linkedPactRecordId === null)
+      throw new ProductError("CANONICAL_JOB_NOT_LINKED", 409);
+    if (runtime.automation === undefined)
+      throw new Error("AUTOMATION_RUNTIME_UNAVAILABLE");
+    const result = await runtime.automation.wake(
+      draft.id,
+      draft.linkedPactRecordId,
+      idempotencyKey,
+    );
+    return json({ status: "QUEUED", replayed: result.replayed }, 202);
   } catch (error) {
     return errorResponse(error);
   }

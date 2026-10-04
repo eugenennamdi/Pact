@@ -1,10 +1,11 @@
 {
-  "name": "@pact/web",
+  "name": "@pact/worker-verifier",
   "version": "0.0.0",
   "private": true,
+  "type": "module",
   "scripts": {
-    "build": "next build",
-    "dev": "next dev",
+    "build": "tsc",
+    "start": "node dist/main.js",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -12,12 +13,6 @@
     "@pact/database": "0.0.0",
     "@pact/orchestrator": "0.0.0",
     "@pact/verifier": "0.0.0",
-    "next": "16.3.6",
-    "react": "19.3.0",
-    "react-dom": "19.3.0"
-  },
-  "devDependencies": {
-    "@types/react": "19.3.0",
-    "@types/react-dom": "19.2.3"
+    "viem": "2.56.9"
   }
 }

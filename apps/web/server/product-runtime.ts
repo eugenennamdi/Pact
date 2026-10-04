@@ -1,4 +1,5 @@
 import { createPactDatabase, type PactDatabase } from "@pact/database";
+import { PostgresAutomationRepository } from "@pact/automation";
 import { createGitHubPullRequestClient } from "@pact/verifier/github";
 import {
   InMemoryRateLimiter,
@@ -19,6 +20,7 @@ export {
   handleReadSettlement,
   handlePrepareWalletAction,
   handleConfirmWalletAction,
+  handleRetryPact,
 } from "../../../packages/product/src/http";
 
 let runtime: ProductRuntime | undefined;
@@ -37,6 +39,7 @@ export function getProductRuntime(): ProductRuntime {
     rateLimiter: new InMemoryRateLimiter(),
     chain: createProductChainClient({ rpcUrl: config.arcRpcUrl }),
     registrar: new ProductCanonicalPactRegistrar(database),
+    automation: new PostgresAutomationRepository(database),
   });
   return runtime;
 }
