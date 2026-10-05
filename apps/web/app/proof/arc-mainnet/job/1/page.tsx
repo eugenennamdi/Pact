@@ -19,7 +19,7 @@ export default function MainnetProofPage() {
         </p>
       </div>
 
-      <div className="notice" style={{ marginBottom: "2rem" }}>
+      <div className="notice" style={{ marginBottom: "1.5rem" }}>
         <h3 style={{ margin: "0 0 0.25rem 0" }}>Historical proof surface</h3>
         <p style={{ margin: 0 }}>
           This page represents an authoritative, completed Mainnet settlement
@@ -27,6 +27,97 @@ export default function MainnetProofPage() {
           connections, draft creation, or signing requests.
         </p>
       </div>
+
+      {/* EXECUTIVE PROOF HIGHLIGHTS */}
+      <section
+        aria-label="Settlement proof summary"
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(13rem, 1fr))",
+          gap: "1rem",
+          padding: "1.25rem 1.5rem",
+          background: "var(--bg-surface)",
+          border: "1px solid var(--accent-verified-border)",
+          borderRadius: "var(--radius-lg)",
+          boxShadow: "var(--shadow-xs)",
+          marginBottom: "2rem",
+        }}
+      >
+        <div>
+          <div className="review-fact-label">Settlement Status</div>
+          <div
+            style={{
+              fontSize: "1.05rem",
+              fontWeight: 700,
+              color: "var(--accent-verified)",
+              display: "flex",
+              alignItems: "center",
+              gap: "0.4rem",
+              marginTop: "0.2rem",
+            }}
+          >
+            <span className="badge-dot badge-dot-verified" aria-hidden="true" />
+            <span>Completed</span>
+          </div>
+          <div style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
+            Arc Mainnet (5042) · Job #{proof.jobId}
+          </div>
+        </div>
+
+        <div>
+          <div className="review-fact-label">Settlement Amount</div>
+          <div
+            style={{
+              fontSize: "1.05rem",
+              fontWeight: 700,
+              color: "var(--text-primary)",
+              marginTop: "0.2rem",
+            }}
+          >
+            0.10 USDC
+          </div>
+          <div style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
+            Provider payout: 0.10 USDC
+          </div>
+        </div>
+
+        <div>
+          <div className="review-fact-label">Verified Condition</div>
+          <div
+            style={{
+              fontSize: "0.9375rem",
+              fontWeight: 600,
+              color: "var(--text-primary)",
+              marginTop: "0.2rem",
+            }}
+          >
+            {proof.github.repository}#{proof.github.pullRequest}
+          </div>
+          <div style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
+            Merged to <code>main</code>
+          </div>
+        </div>
+
+        <div>
+          <div className="review-fact-label">Settlement Transaction</div>
+          <div style={{ marginTop: "0.25rem" }}>
+            <HashDisplay hash={proof.settlement.transactionHash} />
+          </div>
+          <div style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
+            Block #{proof.settlement.receiptBlockNumber}
+          </div>
+        </div>
+
+        <div>
+          <div className="review-fact-label">Evidence Hash</div>
+          <div style={{ marginTop: "0.25rem" }}>
+            <HashDisplay hash={proof.evidenceHash} />
+          </div>
+          <div style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
+            Cryptographic attestation digest
+          </div>
+        </div>
+      </section>
 
       <div className="grid">
         {/* SURFACE 1: CERTIFIED SNAPSHOT */}

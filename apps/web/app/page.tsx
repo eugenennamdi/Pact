@@ -80,7 +80,6 @@ export default function Home() {
               Supported condition: GitHub PR merged
             </h2>
           </div>
-          <span className="badge badge-verified">Production ready</span>
         </div>
         <p style={{ maxWidth: "44rem", marginBottom: "1.5rem" }}>
           Pact validates that a specific pull request has merged into its target

@@ -227,14 +227,16 @@ function WalletActionPanel({
           >
             <div
               style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "0.5rem",
-                marginBottom: "0.5rem",
+                marginBottom: "0.4rem",
               }}
             >
-              <span className="badge badge-pending">Action required</span>
-              <span style={{ fontWeight: 600, fontSize: "0.9375rem" }}>
+              <span
+                style={{
+                  fontWeight: 600,
+                  fontSize: "1rem",
+                  color: "var(--text-primary)",
+                }}
+              >
                 {actionTitle(decision.action)}
               </span>
             </div>
@@ -289,7 +291,7 @@ function WalletActionPanel({
           <h3 style={{ margin: 0 }}>Sign in to continue</h3>
           <p style={{ margin: 0 }}>
             Sign in to Pact with the connected wallet before preparing this
-            action.
+            action. No transaction or gas required.
           </p>
           <div className="actions" style={{ margin: 0 }}>
             <button
@@ -308,7 +310,8 @@ function WalletActionPanel({
         <div className="error stack" style={{ margin: 0, gap: "0.9rem" }}>
           <h3 style={{ margin: "0 0 0.35rem 0" }}>Wrong network</h3>
           <p style={{ margin: 0 }}>
-            Your wallet must be connected to Arc Testnet (Chain ID 5042002).
+            Pact requires Arc Testnet (Chain ID 5042002). Switch networks to
+            continue.
           </p>
           <div className="actions" style={{ margin: 0 }}>
             <button
@@ -334,14 +337,16 @@ function WalletActionPanel({
         >
           <div
             style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "0.5rem",
-              marginBottom: "0.5rem",
+              marginBottom: "0.4rem",
             }}
           >
-            <span className="badge badge-neutral">Awaiting client</span>
-            <span style={{ fontWeight: 600 }}>
+            <span
+              style={{
+                fontWeight: 600,
+                fontSize: "1rem",
+                color: "var(--text-primary)",
+              }}
+            >
               Waiting for client signature
             </span>
           </div>
@@ -371,14 +376,16 @@ function WalletActionPanel({
         >
           <div
             style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "0.5rem",
-              marginBottom: "0.5rem",
+              marginBottom: "0.4rem",
             }}
           >
-            <span className="badge badge-neutral">Awaiting provider</span>
-            <span style={{ fontWeight: 600 }}>
+            <span
+              style={{
+                fontWeight: 600,
+                fontSize: "1rem",
+                color: "var(--text-primary)",
+              }}
+            >
               Waiting for provider confirmation
             </span>
           </div>
@@ -407,14 +414,16 @@ function WalletActionPanel({
         >
           <div
             style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "0.5rem",
-              marginBottom: "0.5rem",
+              marginBottom: "0.4rem",
             }}
           >
-            <span className="badge badge-verified">Automated execution</span>
-            <span style={{ fontWeight: 600, color: "var(--accent-verified)" }}>
+            <span
+              style={{
+                fontWeight: 600,
+                fontSize: "1rem",
+                color: "var(--accent-verified)",
+              }}
+            >
               {pact.status === "AWAITING_CONDITION"
                 ? "Awaiting GitHub merge condition"
                 : pact.status === "VERIFYING"
@@ -459,12 +468,6 @@ function WalletActionPanel({
       {prepared?.result === "PREPARED" && (
         <div className="review-surface" style={{ marginTop: "1.25rem" }}>
           <div className="review-header">
-            <span
-              className="badge badge-pending"
-              style={{ marginBottom: "0.5rem" }}
-            >
-              Review prepared transaction
-            </span>
             <h3>Confirm onchain parameters</h3>
             <p className="review-summary">{prepared.summary}</p>
           </div>
@@ -666,7 +669,7 @@ function EvidenceView({ evidence }: { readonly evidence: EvidenceDto | null }) {
           </dd>
           <dt>Outcome</dt>
           <dd>
-            <span className="badge badge-verified">MERGED</span>
+            <strong>PR Merged</strong>
           </dd>
           <dt>Merge commit SHA</dt>
           <dd>
@@ -730,7 +733,7 @@ function SettlementView({
         <dl>
           <dt>Settlement state</dt>
           <dd>
-            <span className="badge badge-verified">{settlement.state}</span>
+            <strong>{settlement.state}</strong>
           </dd>
           <dt>Provider payout</dt>
           <dd>
@@ -1052,8 +1055,8 @@ export function PactDetail({ slug }: { readonly slug: string }) {
               Authoritative onchain transaction history for this Pact.
             </p>
           </div>
-          <span className="badge badge-neutral">
-            {pact.walletActions.length} / 6 actions
+          <span style={{ fontSize: "0.8125rem", color: "var(--text-muted)" }}>
+            {pact.walletActions.length} of 6 confirmed
           </span>
         </div>
 

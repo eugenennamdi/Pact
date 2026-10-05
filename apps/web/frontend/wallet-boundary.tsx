@@ -379,7 +379,9 @@ export function WalletBoundary({ children }: { readonly children: ReactNode }) {
                     <strong>{item.info.name}</strong>
                     <span>{item.info.rdns}</span>
                   </span>
-                  <span aria-hidden="true">→</span>
+                  <span className="wallet-provider-arrow" aria-hidden="true">
+                    →
+                  </span>
                 </button>
               );
             })}
@@ -435,23 +437,35 @@ export function WalletBoundary({ children }: { readonly children: ReactNode }) {
           </strong>
         </div>
         {chainId !== ARC_TESTNET_CHAIN_ID ? (
-          <button
-            type="button"
-            className="wallet-dialog-action"
-            onClick={() => void switchNetwork()}
-            disabled={busy}
-          >
-            Switch to Arc Testnet
-          </button>
+          <div className="wallet-dialog-callout warning">
+            <div className="wallet-callout-text">
+              <strong>Pact requires Arc Testnet</strong>
+              <small>Switch networks to interact with contracts.</small>
+            </div>
+            <button
+              type="button"
+              className="wallet-dialog-action"
+              onClick={() => void switchNetwork()}
+              disabled={busy}
+            >
+              Switch to Arc Testnet
+            </button>
+          </div>
         ) : !authenticated ? (
-          <button
-            type="button"
-            className="wallet-dialog-action"
-            onClick={() => void authenticate()}
-            disabled={busy}
-          >
-            Sign in to Pact
-          </button>
+          <div className="wallet-dialog-callout">
+            <div className="wallet-callout-text">
+              <strong>Sign in to Pact</strong>
+              <small>No transaction or gas required.</small>
+            </div>
+            <button
+              type="button"
+              className="wallet-dialog-action"
+              onClick={() => void authenticate()}
+              disabled={busy}
+            >
+              Sign in to Pact
+            </button>
+          </div>
         ) : null}
         <button
           type="button"
@@ -516,7 +530,8 @@ export function WalletRequirement() {
   if (wallet.address === null) {
     return (
       <div className="wallet-requirement">
-        <div>
+        <div className="wallet-requirement-copy">
+          <strong>Client wallet required</strong>
           <span>Connect your client wallet to create this Pact.</span>
           {wallet.message !== null && (
             <span role="alert" className="wallet-requirement-message">
@@ -533,7 +548,8 @@ export function WalletRequirement() {
   if (wallet.chainId !== ARC_TESTNET_CHAIN_ID) {
     return (
       <div className="wallet-requirement wallet-requirement-warning">
-        <div>
+        <div className="wallet-requirement-copy">
+          <strong>Wrong network</strong>
           <span>Switch to Arc Testnet to continue.</span>
           {wallet.message !== null && (
             <span role="alert" className="wallet-requirement-message">
@@ -553,8 +569,11 @@ export function WalletRequirement() {
   }
   return (
     <div className="wallet-requirement">
-      <div>
-        <span>Sign in to create a Pact with this wallet.</span>
+      <div className="wallet-requirement-copy">
+        <strong>Sign in to Pact</strong>
+        <span>
+          Sign a message to verify this wallet. No transaction or gas required.
+        </span>
         {wallet.message !== null && (
           <span role="alert" className="wallet-requirement-message">
             {wallet.message}

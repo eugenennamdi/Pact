@@ -77,10 +77,7 @@ export function CreatePact() {
                 Lock USDC against an objectively verifiable GitHub merge event.
               </p>
             </div>
-            <span className="badge badge-neutral">Draft specification</span>
           </div>
-
-          <WalletRequirement />
 
           <div className="form-group">
             <label>
@@ -148,6 +145,8 @@ export function CreatePact() {
               />
             </label>
           </div>
+
+          <WalletRequirement />
 
           <div className="actions" style={{ marginTop: "0.5rem" }}>
             <button
