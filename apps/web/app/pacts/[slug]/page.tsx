@@ -1,5 +1,4 @@
 import { PactDetail } from "../../../frontend/pact-detail";
-import { WalletBoundary } from "../../../frontend/wallet-boundary";
 
 export default async function PactPage({
   params,
@@ -9,9 +8,7 @@ export default async function PactPage({
   const { slug } = await params;
   return (
     <main className="page">
-      <WalletBoundary>
-        <PactDetail slug={slug} />
-      </WalletBoundary>
+      <PactDetail slug={slug} />
     </main>
   );
 }

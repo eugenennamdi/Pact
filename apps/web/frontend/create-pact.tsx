@@ -6,7 +6,7 @@ import type { CreatePactResponseDto } from "../../../packages/product/src/public
 import { ARC_TESTNET_CHAIN_ID } from "./wallet";
 import { ProductApiFailure, createProductApiClient } from "./product-client";
 import { ErrorNotice } from "./error-notice";
-import { useWallet, WalletControls } from "./wallet-boundary";
+import { useWallet, WalletRequirement } from "./wallet-boundary";
 import { CopyButton, NetworkBadge } from "./presentation";
 
 const api = createProductApiClient();
@@ -69,8 +69,6 @@ export function CreatePact() {
   return (
     <div className="grid">
       <div className="stack">
-        <WalletControls />
-
         <form className="card stack" onSubmit={(event) => void submit(event)}>
           <div className="card-header">
             <div className="card-title-group">
@@ -81,6 +79,8 @@ export function CreatePact() {
             </div>
             <span className="badge badge-neutral">Draft specification</span>
           </div>
+
+          <WalletRequirement />
 
           <div className="form-group">
             <label>
@@ -158,11 +158,7 @@ export function CreatePact() {
                 wallet.chainId !== ARC_TESTNET_CHAIN_ID
               }
             >
-              {submitting
-                ? "Creating draft instruction…"
-                : !wallet.authenticated
-                  ? "Authenticate wallet to create"
-                  : "Create draft"}
+              {submitting ? "Creating draft instruction…" : "Create draft"}
             </button>
           </div>
 

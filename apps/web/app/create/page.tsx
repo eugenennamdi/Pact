@@ -1,5 +1,4 @@
 import { CreatePact } from "../../frontend/create-pact";
-import { WalletBoundary } from "../../frontend/wallet-boundary";
 
 export default function CreatePage() {
   return (
@@ -12,9 +11,7 @@ export default function CreatePage() {
           public GitHub pull request and enforces protocol deadlines onchain.
         </p>
       </div>
-      <WalletBoundary>
-        <CreatePact />
-      </WalletBoundary>
+      <CreatePact />
     </main>
   );
 }

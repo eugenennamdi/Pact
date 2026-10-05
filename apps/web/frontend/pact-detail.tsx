@@ -16,7 +16,7 @@ import {
   prepareActionForWallet,
   sendPreparedTransaction,
 } from "./wallet-action";
-import { WalletControls, useWallet } from "./wallet-boundary";
+import { useWallet } from "./wallet-boundary";
 import {
   ActorBadge,
   AddressDisplay,
@@ -262,7 +262,7 @@ function WalletActionPanel({
 
       {/* Decision: CONNECT */}
       {decision.kind === "CONNECT" && (
-        <div className="notice" style={{ margin: 0 }}>
+        <div className="notice stack" style={{ margin: 0, gap: "0.9rem" }}>
           <h3 style={{ margin: "0 0 0.35rem 0" }}>
             Wallet connection required
           </h3>
@@ -275,27 +275,50 @@ function WalletActionPanel({
             </code>
             ) to continue.
           </p>
+          <div className="actions" style={{ margin: 0 }}>
+            <button type="button" onClick={wallet.openConnectModal}>
+              Connect to continue
+            </button>
+          </div>
         </div>
       )}
 
       {/* Decision: AUTHENTICATE */}
       {decision.kind === "AUTHENTICATE" && (
-        <div className="notice" style={{ margin: 0 }}>
-          <h3 style={{ margin: "0 0 0.35rem 0" }}>Authentication required</h3>
+        <div className="notice stack" style={{ margin: 0, gap: "0.9rem" }}>
+          <h3 style={{ margin: 0 }}>Sign in to continue</h3>
           <p style={{ margin: 0 }}>
-            Authenticate the connected wallet via signature challenge before
-            preparing this action.
+            Sign in to Pact with the connected wallet before preparing this
+            action.
           </p>
+          <div className="actions" style={{ margin: 0 }}>
+            <button
+              type="button"
+              onClick={() => void wallet.authenticate()}
+              disabled={wallet.busy}
+            >
+              Sign in to Pact
+            </button>
+          </div>
         </div>
       )}
 
       {/* Decision: WRONG_NETWORK */}
       {decision.kind === "WRONG_NETWORK" && (
-        <div className="error" style={{ margin: 0 }}>
+        <div className="error stack" style={{ margin: 0, gap: "0.9rem" }}>
           <h3 style={{ margin: "0 0 0.35rem 0" }}>Wrong network</h3>
           <p style={{ margin: 0 }}>
             Your wallet must be connected to Arc Testnet (Chain ID 5042002).
           </p>
+          <div className="actions" style={{ margin: 0 }}>
+            <button
+              type="button"
+              onClick={() => void wallet.switchNetwork()}
+              disabled={wallet.busy}
+            >
+              Switch to Arc Testnet
+            </button>
+          </div>
         </div>
       )}
 
@@ -423,6 +446,12 @@ function WalletActionPanel({
           }}
         >
           No wallet action is available. The lifecycle is complete or finalized.
+        </p>
+      )}
+
+      {wallet.message !== null && (
+        <p role="alert" className="wallet-dialog-message">
+          {wallet.message}
         </p>
       )}
 
@@ -828,7 +857,6 @@ export function PactDetail({ slug }: { readonly slug: string }) {
   if (pact === null) {
     return (
       <div className="stack" style={{ gap: "1.5rem" }}>
-        <WalletControls />
         <section
           className="card"
           style={{ padding: "3rem 2rem", textAlign: "center" }}
@@ -972,11 +1000,8 @@ export function PactDetail({ slug }: { readonly slug: string }) {
         <ExecutionRail pact={pact} />
       </div>
 
-      {/* Wallet Controls & Main Action Panel */}
-      <div className="grid">
-        <WalletControls />
-        <WalletActionPanel pact={pact} refresh={refresh} />
-      </div>
+      {/* Main Action Panel */}
+      <WalletActionPanel pact={pact} refresh={refresh} />
 
       {/* Retry Verification (Secondary action only when permitted) */}
       {retryAllowed && (
