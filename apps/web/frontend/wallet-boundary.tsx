@@ -326,10 +326,7 @@ export function WalletBoundary({ children }: { readonly children: ReactNode }) {
         onClose={() => setConnectModalOpen(false)}
       >
         <div className="wallet-dialog-header">
-          <div>
-            <span className="eyebrow">Arc Testnet</span>
-            <h2 id="connect-wallet-title">Connect a wallet</h2>
-          </div>
+          <h2 id="connect-wallet-title">Connect a wallet</h2>
           <button
             type="button"
             className="wallet-dialog-close"
@@ -360,6 +357,7 @@ export function WalletBoundary({ children }: { readonly children: ReactNode }) {
                   key={item.info.uuid}
                   type="button"
                   className="wallet-provider-row"
+                  data-rdns={item.info.rdns}
                   disabled={busy}
                   onClick={() => void connectProvider(item.info.uuid)}
                 >
@@ -377,7 +375,6 @@ export function WalletBoundary({ children }: { readonly children: ReactNode }) {
                   )}
                   <span className="wallet-provider-name">
                     <strong>{item.info.name}</strong>
-                    <span>{item.info.rdns}</span>
                   </span>
                   <span className="wallet-provider-arrow" aria-hidden="true">
                     →
