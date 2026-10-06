@@ -4,10 +4,6 @@ export default function Home() {
   return (
     <main className="page">
       <section className="landing-hero" aria-labelledby="hero-title">
-        <div className="hero-tag">
-          <span className="hero-tag-dot" aria-hidden="true" />
-          <span>Interactive Arc Testnet Execution</span>
-        </div>
         <h1 id="hero-title">
           Programmable settlement for verifiable outcomes.
         </h1>

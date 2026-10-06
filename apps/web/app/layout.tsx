@@ -27,13 +27,6 @@ export default function RootLayout({ children }: { children: ReactNode }) {
                   </span>
                   <span>Pact</span>
                 </Link>
-                <span
-                  className="network-badge"
-                  title="Interactive Arc Testnet Environment"
-                >
-                  <span className="network-indicator" aria-hidden="true" />
-                  Arc Testnet
-                </span>
               </div>
               <div className="nav-actions">
                 <nav className="nav-links" aria-label="Primary navigation">
