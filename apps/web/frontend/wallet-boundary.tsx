@@ -58,6 +58,97 @@ interface WalletContextValue {
 const WalletContext = createContext<WalletContextValue | null>(null);
 const api = createProductApiClient();
 
+function isRabbyProvider(item: DiscoveredWalletProvider): boolean {
+  return (
+    item.info.rdns === "io.rabby" ||
+    item.info.name.toLowerCase().includes("rabby")
+  );
+}
+
+function RabbyWalletIcon() {
+  return (
+    <span
+      className="wallet-provider-icon wallet-provider-rabby"
+      aria-hidden="true"
+    >
+      <svg
+        viewBox="0 0 28 28"
+        fill="none"
+        xmlns="http://www.w3.org/2000/svg"
+        focusable="false"
+      >
+        <rect width="28" height="28" rx="6" fill="#8697FF" />
+        <path
+          fill="url(#rabby-body)"
+          d="M22.54 15.078c.677-1.514-2.673-5.744-5.874-7.506-2.017-1.365-4.12-1.178-4.545-.579-.935 1.316 3.094 2.43 5.788 3.731-.58.252-1.125.703-1.446 1.28-1.004-1.096-3.209-2.04-5.796-1.28-1.743.513-3.191 1.721-3.751 3.546a1.097 1.097 0 1 0-.445 2.1c.112 0 .463-.075.463-.075l5.612.041c-2.244 3.56-4.018 4.081-4.018 4.698s1.697.45 2.335.22c3.05-1.1 6.327-4.531 6.89-5.519 2.36.295 4.345.33 4.786-.657Z"
+        />
+        <path
+          fill="url(#rabby-ear)"
+          fillRule="evenodd"
+          clipRule="evenodd"
+          d="m17.885 10.713.025.01c.125-.049.105-.233.07-.378-.078-.333-1.438-1.676-2.715-2.277-1.743-.82-3.025-.777-3.212-.398.356.726 1.998 1.408 3.714 2.12.723.3 1.46.606 2.118.923Z"
+        />
+        <path
+          fill="url(#rabby-back)"
+          fillRule="evenodd"
+          clipRule="evenodd"
+          d="M15.701 18.036a10.296 10.296 0 0 0-1.2-.37c.482-.862.583-2.138.128-2.945-.639-1.133-1.44-1.736-3.304-1.736-1.024 0-3.783.346-3.832 2.648-.005.242 0 .464.017.667l5.036.037a17.264 17.264 0 0 1-1.871 2.483c.669.172 1.221.316 1.728.448.48.125.92.24 1.38.357a21.003 21.003 0 0 0 1.918-1.59Z"
+        />
+        <path
+          fill="url(#rabby-tail)"
+          d="M6.848 16.063c.206 1.75 1.2 2.435 3.232 2.638 2.032.203 3.197.067 4.749.208 1.296.118 2.453.778 2.882.55.386-.205.17-.947-.347-1.423-.67-.617-1.597-1.046-3.229-1.199.325-.89.234-2.138-.27-2.817-.731-.982-2.079-1.426-3.785-1.232-1.782.202-3.49 1.08-3.232 3.275Z"
+        />
+        <defs>
+          <linearGradient
+            id="rabby-body"
+            x1="10.464"
+            x2="22.394"
+            y1="13.737"
+            y2="17.12"
+            gradientUnits="userSpaceOnUse"
+          >
+            <stop stopColor="#fff" />
+            <stop offset="1" stopColor="#fff" />
+          </linearGradient>
+          <linearGradient
+            id="rabby-ear"
+            x1="20.386"
+            x2="11.779"
+            y1="13.509"
+            y2="4.879"
+            gradientUnits="userSpaceOnUse"
+          >
+            <stop stopColor="#7258DC" />
+            <stop offset="1" stopColor="#797DEA" stopOpacity="0" />
+          </linearGradient>
+          <linearGradient
+            id="rabby-back"
+            x1="15.94"
+            x2="7.673"
+            y1="18.337"
+            y2="13.584"
+            gradientUnits="userSpaceOnUse"
+          >
+            <stop stopColor="#7461EA" />
+            <stop offset="1" stopColor="#BFC2FF" stopOpacity="0" />
+          </linearGradient>
+          <linearGradient
+            id="rabby-tail"
+            x1="11.177"
+            x2="16.765"
+            y1="13.648"
+            y2="20.749"
+            gradientUnits="userSpaceOnUse"
+          >
+            <stop stopColor="#fff" />
+            <stop offset=".984" stopColor="#D5CEFF" />
+          </linearGradient>
+        </defs>
+      </svg>
+    </span>
+  );
+}
+
 function WalletFallbackIcon() {
   return (
     <span className="wallet-provider-fallback" aria-hidden="true">
@@ -361,7 +452,9 @@ export function WalletBoundary({ children }: { readonly children: ReactNode }) {
                   disabled={busy}
                   onClick={() => void connectProvider(item.info.uuid)}
                 >
-                  {icon === null ? (
+                  {isRabbyProvider(item) ? (
+                    <RabbyWalletIcon />
+                  ) : icon === null ? (
                     <WalletFallbackIcon />
                   ) : (
                     <Image

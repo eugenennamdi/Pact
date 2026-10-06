@@ -658,6 +658,19 @@ button.wallet-provider-row:hover:not(:disabled) .wallet-provider-arrow {
   object-fit: cover;
 }
 
+.wallet-provider-rabby {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.wallet-provider-rabby svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
 .wallet-provider-fallback {
   display: inline-flex;
   align-items: center;
