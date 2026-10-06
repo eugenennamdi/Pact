@@ -51,6 +51,7 @@ function signer(action: PublicWalletActionPath) {
 
 class ProductWallet implements Eip1193Provider {
   readonly address: `0x${string}`;
+  readonly calls: Eip1193RequestArguments[] = [];
   readonly sent: Eip1193RequestArguments[] = [];
   #nonce = 1;
 
@@ -59,6 +60,7 @@ class ProductWallet implements Eip1193Provider {
   }
 
   async request(arguments_: Eip1193RequestArguments): Promise<unknown> {
+    this.calls.push(arguments_);
     if (arguments_.method === "eth_requestAccounts") return [this.address];
     if (arguments_.method === "eth_chainId") return "0x4cef52";
     if (arguments_.method === "personal_sign") return `0x${"12".repeat(65)}`;
@@ -154,7 +156,7 @@ const settlement: SettlementDto = {
 };
 
 describe("frontend functional product integration", () => {
-  it("completes CREATE_JOB, BIND_CONDITION, SET_BUDGET, APPROVE_USDC, FUND, and SUBMIT before automatic settlement", async () => {
+  it("connects a selected wallet, signs in, and completes all six actions before automatic settlement", async () => {
     let confirmedActions = 0;
     let publicRead = 0;
     const requests: string[] = [];
@@ -297,16 +299,25 @@ describe("frontend functional product integration", () => {
     const api = createProductApiClient(fetchImplementation);
     const clientWallet = new ProductWallet(CLIENT);
     const providerWallet = new ProductWallet(PROVIDER);
+    expect(clientWallet.calls).toEqual([]);
     const clientConnection = await connectWallet(clientWallet);
     expect(clientConnection).toEqual({
       address: CLIENT,
       chainId: ARC_TESTNET_CHAIN_ID,
     });
+    expect(clientWallet.calls.map((call) => call.method)).toEqual([
+      "eth_requestAccounts",
+      "eth_chainId",
+    ]);
     await authenticateWallet({
       client: api,
       provider: clientWallet,
       ...clientConnection,
     });
+    expect(clientWallet.sent).toEqual([]);
+    expect(clientWallet.calls.map((call) => call.method)).toContain(
+      "personal_sign",
+    );
     const draft = await api.createPact(
       {
         repository: "example/repository",

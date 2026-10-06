@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { HashDisplay } from "./presentation";
 
 interface ReceiptResult {
   readonly blockHash?: string;
@@ -91,29 +92,115 @@ export function MainnetLiveConfirmation({
 
   return (
     <section className="card" aria-labelledby="live-confirmation-heading">
-      <h2 id="live-confirmation-heading">Live chain confirmation</h2>
-      {state.kind === "LOADING" && <p role="status">Reading Arc Mainnet…</p>}
+      <div className="card-header">
+        <div className="card-title-group">
+          <h2 id="live-confirmation-heading">Live chain confirmation</h2>
+          <p className="card-description">
+            Independent, on-demand query to the public Arc Mainnet RPC node.
+          </p>
+        </div>
+        <span
+          className={`badge ${
+            state.kind === "CONFIRMED"
+              ? "badge-verified"
+              : state.kind === "LOADING"
+                ? "badge-pending"
+                : state.kind === "MISMATCH"
+                  ? "badge-error"
+                  : "badge-neutral"
+          }`}
+        >
+          <span className="badge-dot" />
+          {state.kind === "CONFIRMED"
+            ? "Live confirmed"
+            : state.kind === "LOADING"
+              ? "Querying Arc RPC…"
+              : state.kind === "MISMATCH"
+                ? "Receipt mismatch"
+                : "Live RPC unavailable"}
+        </span>
+      </div>
+
+      {state.kind === "LOADING" && (
+        <div style={{ padding: "1rem 0", color: "var(--text-secondary)" }}>
+          <p role="status" style={{ margin: 0, fontSize: "0.875rem" }}>
+            Reading transaction receipt directly from Arc Mainnet
+            (https://rpc.mainnet.arc.io)…
+          </p>
+        </div>
+      )}
+
       {state.kind === "UNAVAILABLE" && (
-        <p role="status">Live Mainnet state is currently unavailable.</p>
+        <div className="notice" style={{ margin: "0.5rem 0" }}>
+          <p role="status" style={{ margin: 0 }}>
+            Live confirmation unavailable. The public Arc Mainnet RPC did not
+            respond within the timeout. The certified cryptographic snapshot
+            above remains fully authoritative.
+          </p>
+        </div>
       )}
+
       {state.kind === "MISMATCH" && (
-        <p role="alert" className="error">
-          Live Mainnet receipt does not match the certified snapshot.
-        </p>
+        <div className="error" style={{ margin: "0.5rem 0" }}>
+          <p role="alert" style={{ margin: 0 }}>
+            Live Mainnet receipt does not match the certified snapshot
+            coordinates.
+          </p>
+        </div>
       )}
+
       {state.kind === "CONFIRMED" && (
-        <dl>
-          <dt>Status</dt>
-          <dd>Confirmed against Arc Mainnet</dd>
-          <dt>Transaction</dt>
-          <dd className="hash">{state.receipt.transactionHash}</dd>
-          <dt>Block</dt>
-          <dd>{expectedBlockNumber}</dd>
-          <dt>Block hash</dt>
-          <dd className="hash">{state.receipt.blockHash}</dd>
-        </dl>
+        <div className="stack" style={{ gap: "1rem" }}>
+          <div
+            style={{
+              background: "var(--accent-verified-bg)",
+              border: "1px solid var(--accent-verified-border)",
+              borderRadius: "var(--radius-md)",
+              padding: "0.85rem 1rem",
+              fontSize: "0.875rem",
+              color: "var(--accent-verified)",
+              fontWeight: 550,
+            }}
+          >
+            ✓ Confirmed onchain against Arc Mainnet node. Block and transaction
+            hash match the certified manifest.
+          </div>
+          <dl>
+            <dt>Chain ID</dt>
+            <dd>5042 (0x13b2 / Arc Mainnet)</dd>
+            <dt>Transaction</dt>
+            <dd>
+              <HashDisplay
+                hash={state.receipt.transactionHash ?? transactionHash}
+              />
+            </dd>
+            <dt>Confirmed block</dt>
+            <dd>Block #{expectedBlockNumber}</dd>
+            <dt>Block hash</dt>
+            <dd>
+              <HashDisplay
+                hash={state.receipt.blockHash ?? expectedBlockHash}
+              />
+            </dd>
+            <dt>Execution status</dt>
+            <dd>
+              <span className="badge badge-verified">Success (0x1)</span>
+            </dd>
+          </dl>
+        </div>
       )}
-      <p>This read-only check never requests a wallet or transaction.</p>
+
+      <p
+        style={{
+          marginTop: "1.25rem",
+          marginBottom: 0,
+          fontSize: "0.75rem",
+          color: "var(--text-muted)",
+        }}
+      >
+        This read-only check runs entirely in the browser and never requests a
+        wallet, signature, or transaction.
+      </p>
     </section>
   );
 }

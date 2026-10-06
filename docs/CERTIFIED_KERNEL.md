@@ -11,11 +11,18 @@ execute, the Mainnet release. The distinct runtime identities are:
 - Pinned ERC-8183 source: `142e669c1fd318486a4628395b629f033654dd06`
 
 `certified-kernel.json` lists the protected paths, reviewed contract creation
-identities, toolchain, and resolved dependency-closure fingerprint.
-`npm run kernel:verify` fails when a protected path differs from the evidence
-checkpoint, a certified dependency resolution changes, a contract artifact does
-not reproduce, a manifest fails validation, or provenance is inconsistent.
-Generated outputs are not authoritative.
+identities, toolchain, and dependency provenance. Schema V2 preserves both the
+historical dependency fingerprint reproduced from `certifiedBaselineCommit` and
+the effective fingerprint required from the current checkout. An append-only
+maintenance chain links those identities with exact reviewed dependency changes;
+it does not rewrite protocol, runtime, deployment, or evidence provenance.
+
+`npm run kernel:verify` independently checks the historical closure, the
+maintenance chain and its exact closure diff, the effective current closure,
+protected paths, contract artifacts, deployment manifests, and provenance.
+Generated outputs are not authoritative. Future dependency maintenance requires
+explicit review, an exact closure diff, security audit, full regression, and a
+new append-only maintenance record.
 
 Product pages, components, DTOs, `packages/product/**`, and `apps/worker/**` may
 be added outside the protected paths. Product-only dependencies may be added

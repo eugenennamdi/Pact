@@ -21,8 +21,11 @@ const messages: Readonly<Record<string, string>> = {
     "The authenticated session does not match the connected wallet.",
   PREPARE_WRONG_NETWORK:
     "The prepared action is not for Arc Testnet. No transaction was sent.",
-  SIGNATURE_REJECTED: "The wallet signature request was rejected.",
+  SIGNATURE_REJECTED: "Sign-in cancelled.",
   WALLET_ACCOUNT_UNAVAILABLE: "The wallet did not return an account.",
+  WALLET_PROVIDER_UNAVAILABLE: "Wallet is no longer available.",
+  WALLET_CONNECTION_CANCELLED: "Connection cancelled.",
+  WALLET_CONNECTION_FAILED: "Could not connect wallet. Try again.",
 };
 
 export function errorDescription(error: unknown): string {

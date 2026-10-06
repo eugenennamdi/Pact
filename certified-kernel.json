@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "protocolVersion": "pact-v1",
   "certifiedBaselineCommit": "3d6e6b34c42166b5c3c72dc51abd664de5966af8",
   "testnetCertifiedRuntimeCommit": "fa20328df6643b0d85f6c2b6074d79dd0e5de54c",
@@ -137,6 +137,25 @@
         "viem"
       ]
     },
-    "fingerprint": "sha256:cfc5d576e345e673e36aea5511f230150070bd6fb624c33affaf2012af1a6a8a"
+    "baselineFingerprint": "sha256:cfc5d576e345e673e36aea5511f230150070bd6fb624c33affaf2012af1a6a8a",
+    "fingerprint": "sha256:c0f13475013ecd71cd8d974c453b41c4ad4ce32d1daeeded8d14c23d16db82cb",
+    "resolvedDependencyEntries": 316,
+    "maintenance": [
+      {
+        "schemaVersion": 1,
+        "type": "SECURITY_PATCH",
+        "advisory": "GHSA-68fv-2mgg-jv7q",
+        "changes": [
+          {
+            "package": "source-map-js",
+            "from": "1.2.1",
+            "to": "1.2.2"
+          }
+        ],
+        "fromFingerprint": "sha256:cfc5d576e345e673e36aea5511f230150070bd6fb624c33affaf2012af1a6a8a",
+        "toFingerprint": "sha256:c0f13475013ecd71cd8d974c453b41c4ad4ce32d1daeeded8d14c23d16db82cb",
+        "classification": "BUILD_TOOLING_ONLY"
+      }
+    ]
   }
 }
