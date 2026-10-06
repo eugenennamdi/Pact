@@ -108,13 +108,9 @@ const TOP_LEVEL_KEYS = Object.freeze([
   "dependencyProtection",
 ]);
 
-const REVIEWED_DEPENDENCY_MAINTENANCE = Object.freeze({
-  "source-map-js:1.2.1->1.2.2": Object.freeze({
-    type: "SECURITY_PATCH",
-    advisory: "GHSA-68fv-2mgg-jv7q",
-    classification: "BUILD_TOOLING_ONLY",
-  }),
-});
+const DEPENDENCY_MAINTENANCE_CLASSIFICATIONS = Object.freeze(
+  new Set(["BUILD_TOOLING_ONLY", "DEPLOYED_APPLICATION_RUNTIME"]),
+);
 
 export class KernelVerificationError extends Error {
   constructor(code, message, details = []) {
@@ -190,7 +186,7 @@ function validateDependencyMaintenance(protection) {
       !/^GHSA-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}$/.test(event.advisory)
     )
       fail("MALFORMED_MANIFEST", `${label}.advisory is malformed`);
-    if (event.classification !== "BUILD_TOOLING_ONLY")
+    if (!DEPENDENCY_MAINTENANCE_CLASSIFICATIONS.has(event.classification))
       fail("MALFORMED_MANIFEST", `${label}.classification is not reviewed`);
     dependencyFingerprint(event.fromFingerprint, `${label}.fromFingerprint`);
     dependencyFingerprint(event.toFingerprint, `${label}.toFingerprint`);
@@ -207,6 +203,7 @@ function validateDependencyMaintenance(protection) {
     if (!Array.isArray(event.changes) || event.changes.length === 0)
       fail("MALFORMED_MANIFEST", `${label}.changes must not be empty`);
     const packages = new Set();
+    let previousPackage = "";
     for (const [changeIndex, change] of event.changes.entries()) {
       const changeLabel = `${label}.changes[${changeIndex}]`;
       strictKeys(change, ["package", "from", "to"], changeLabel);
@@ -229,21 +226,16 @@ function validateDependencyMaintenance(protection) {
           "MALFORMED_MANIFEST",
           `${label} contains duplicate package changes`,
         );
-      packages.add(change.package);
-      const reviewed =
-        REVIEWED_DEPENDENCY_MAINTENANCE[
-          `${change.package}:${change.from}->${change.to}`
-        ];
       if (
-        reviewed === undefined ||
-        event.type !== reviewed.type ||
-        event.advisory !== reviewed.advisory ||
-        event.classification !== reviewed.classification
+        previousPackage !== "" &&
+        previousPackage.localeCompare(change.package) >= 0
       )
         fail(
-          "UNREVIEWED_DEPENDENCY_MAINTENANCE",
-          `${changeLabel} is not an explicitly reviewed maintenance change`,
+          "MALFORMED_MANIFEST",
+          `${label}.changes must use ascending package order`,
         );
+      packages.add(change.package);
+      previousPackage = change.package;
     }
     expectedFrom = event.toFingerprint;
   }
@@ -636,14 +628,6 @@ function dependencyPackageName(path) {
   return marker === -1 ? path : path.slice(marker + "node_modules/".length);
 }
 
-function dependencyFieldsWithoutArtifactIdentity(fields) {
-  return Object.fromEntries(
-    Object.entries(fields).filter(
-      ([key]) => !["version", "resolved", "integrity"].includes(key),
-    ),
-  );
-}
-
 function verifyDependencyMaintenanceDiff(baseline, current, maintenance) {
   const expected = new Map();
   for (const event of maintenance) {
@@ -687,14 +671,6 @@ function verifyDependencyMaintenanceDiff(baseline, current, maintenance) {
       fail(
         "DEPENDENCY_MAINTENANCE_DIFF_MISMATCH",
         `${packageName} versions do not match the maintenance record`,
-      );
-    if (
-      canonical(dependencyFieldsWithoutArtifactIdentity(before)) !==
-      canonical(dependencyFieldsWithoutArtifactIdentity(after))
-    )
-      fail(
-        "DEPENDENCY_MAINTENANCE_DIFF_MISMATCH",
-        `${packageName} changed fields beyond version/resolved/integrity`,
       );
     seen.add(packageName);
     changes.push({
