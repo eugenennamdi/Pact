@@ -9,6 +9,12 @@ import type {
   SettlementDto,
 } from "../../../packages/product/src/public-contract";
 import { decidePactAction, mayRetryVerification } from "./action-controller";
+import {
+  COMPLETION_DEADLINE_POLICY,
+  DEADLINE_ANCHOR_EXPLANATION,
+  formatResolvedDeadline,
+  MAXIMUM_LIFETIME_POLICY,
+} from "./deadline-copy";
 import { ErrorNotice } from "./error-notice";
 import { ProductApiFailure, createProductApiClient } from "./product-client";
 import {
@@ -1170,6 +1176,15 @@ export function PactDetail({ slug }: { readonly slug: string }) {
               paddingTop: "1rem",
             }}
           >
+            <p
+              style={{
+                color: "var(--text-secondary)",
+                fontSize: "0.8125rem",
+                margin: "0 0 1rem",
+              }}
+            >
+              {DEADLINE_ANCHOR_EXPLANATION}
+            </p>
             <dl>
               <dt>Client address</dt>
               <dd>
@@ -1202,9 +1217,16 @@ export function PactDetail({ slug }: { readonly slug: string }) {
                 <AddressDisplay address={pact.evaluatorAddress} />
               </dd>
               <dt>Completion deadline</dt>
-              <dd>{timestamp(pact.completionDeadline)}</dd>
-              <dt>Escrow expiry</dt>
-              <dd>{timestamp(pact.expiry)}</dd>
+              <dd>
+                {formatResolvedDeadline(
+                  pact.completionDeadline,
+                  COMPLETION_DEADLINE_POLICY,
+                )}
+              </dd>
+              <dt>Maximum lifetime</dt>
+              <dd>
+                {formatResolvedDeadline(pact.expiry, MAXIMUM_LIFETIME_POLICY)}
+              </dd>
             </dl>
           </div>
         )}
