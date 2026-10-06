@@ -153,6 +153,17 @@ not proof; it is a reference and readiness signal.
 
 ## Deadline model
 
+For the Arc Testnet product flow, the canonical anchor is the Arc block
+timestamp used when `CREATE_JOB` is prepared (`T`):
+
+```text
+completionDeadline = T + 7200
+expiredAt = T + 21600
+```
+
+Both absolute values are persisted with the prepared action and reused through
+the remaining lifecycle. Funding does not reset either deadline.
+
 - `completionDeadline`: stored by PactEvaluator. GitHub's `merged_at` must be at
   or before this time.
 - `expiredAt`: stored by ERC-8183. A Pact completion transaction must execute

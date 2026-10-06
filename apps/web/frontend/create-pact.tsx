@@ -8,6 +8,11 @@ import { ProductApiFailure, createProductApiClient } from "./product-client";
 import { ErrorNotice } from "./error-notice";
 import { useWallet, WalletRequirement } from "./wallet-boundary";
 import { CopyButton, NetworkBadge } from "./presentation";
+import {
+  COMPLETION_DEADLINE_POLICY,
+  DEADLINE_ANCHOR_EXPLANATION,
+  MAXIMUM_LIFETIME_POLICY,
+} from "./deadline-copy";
 
 const api = createProductApiClient();
 
@@ -268,6 +273,15 @@ export function CreatePact() {
               <span className="eyebrow" style={{ marginBottom: "0.5rem" }}>
                 Technical protocol parameters
               </span>
+              <p
+                style={{
+                  color: "var(--text-secondary)",
+                  fontSize: "0.8125rem",
+                  margin: "0 0 1rem",
+                }}
+              >
+                {DEADLINE_ANCHOR_EXPLANATION}
+              </p>
               <dl>
                 <dt>Condition hash</dt>
                 <dd>
@@ -280,13 +294,9 @@ export function CreatePact() {
                   </span>
                 </dd>
                 <dt>Completion deadline</dt>
-                <dd>
-                  {result.deadlinePolicy.completionOffsetSeconds}s after funding
-                </dd>
-                <dt>Expiry policy</dt>
-                <dd>
-                  {result.deadlinePolicy.expiryOffsetSeconds}s maximum lifetime
-                </dd>
+                <dd>{COMPLETION_DEADLINE_POLICY}</dd>
+                <dt>Maximum lifetime</dt>
+                <dd>{MAXIMUM_LIFETIME_POLICY}</dd>
                 <dt>Commerce contract</dt>
                 <dd>
                   <span className="tech-address-wrapper">
