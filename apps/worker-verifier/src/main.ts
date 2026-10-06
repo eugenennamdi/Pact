@@ -4,8 +4,14 @@ import {
   assertTestnetManifest,
   createVerifierScheduler,
   createWorkerHealth,
+  loadWorkerHealthPort,
   jsonWorkerLogger,
   loadVerifierWorkerConfig,
+  probeArcRpc,
+  probeDatabase,
+  probeGithub,
+  safeWorkerReason,
+  startWorkerHealthServer,
 } from "@pact/automation";
 import { PostgresPactRepository, createPactDatabase } from "@pact/database";
 import {
@@ -26,7 +32,6 @@ async function main(): Promise<void> {
   const manifest = assertTestnetManifest(
     await loadDeploymentManifest(config.deploymentManifestPath),
   );
-  await verifyDeploymentIntegrity(config.arcRpcUrl, manifest);
   const signer = createPactCompletionSignerFromEnv(process.env);
   assertSignerIdentity(
     "verifier",
@@ -34,7 +39,6 @@ async function main(): Promise<void> {
     manifest.pactEvaluator.verifier,
   );
   const database = createPactDatabase(config.databaseUrl);
-  await database.sql`SELECT 1`;
   const certifiedRepository = new PostgresPactRepository(database);
   const automation = new PostgresAutomationRepository(database);
   const arc = createArcReadClient({ rpcUrl: config.arcRpcUrl });
@@ -64,28 +68,88 @@ async function main(): Promise<void> {
   const health = createWorkerHealth({
     role: "verifier",
     signerAddress: signer.address,
+    expectedSignerAddress: manifest.pactEvaluator.verifier,
     includesGithub: true,
+    staleAfterMs: Math.max(config.pollIntervalMs * 3, 60_000),
   });
+  await startWorkerHealthServer(health, loadWorkerHealthPort(process.env));
+  let deploymentIntegrityVerified = false;
+  let staleLogged = false;
+  setInterval(
+    () => {
+      const stale = health.read().stale;
+      if (stale && !staleLogged) {
+        staleLogged = true;
+        jsonWorkerLogger({ role: "verifier", event: "worker_loop_stale" });
+      } else if (!stale) {
+        staleLogged = false;
+      }
+    },
+    Math.max(config.pollIntervalMs, 5_000),
+  ).unref();
   jsonWorkerLogger({
     role: "verifier",
     event: "worker_started",
     chainId: manifest.chainId,
   });
   while (true) {
+    let databaseReady = false;
+    let arcReady = false;
+    let githubReady = false;
     try {
-      await scheduler.runOnce();
-      health.ready();
-    } catch (error) {
-      const reason = error instanceof Error ? error.message : "UNKNOWN_FAILURE";
-      health.failed(reason);
-      jsonWorkerLogger({
-        role: "verifier",
-        event: "worker_loop_failed",
-        reason,
-      });
+      await probeDatabase(database);
+      databaseReady = true;
+    } catch {
+      jsonWorkerLogger({ role: "verifier", event: "database_unavailable" });
+    }
+    health.database(databaseReady);
+    try {
+      await probeArcRpc(config.arcRpcUrl);
+      if (!deploymentIntegrityVerified) {
+        await verifyDeploymentIntegrity(config.arcRpcUrl, manifest);
+        deploymentIntegrityVerified = true;
+      }
+      arcReady = true;
+    } catch {
+      jsonWorkerLogger({ role: "verifier", event: "arc_rpc_unavailable" });
+    }
+    health.arcRpc(arcReady);
+    try {
+      await probeGithub(process.env.GITHUB_TOKEN);
+      githubReady = true;
+    } catch {
+      jsonWorkerLogger({ role: "verifier", event: "github_unavailable" });
+    }
+    health.github(githubReady);
+    if (databaseReady && arcReady && githubReady) {
+      try {
+        const outcomes = await scheduler.runOnce();
+        health.loopSucceeded(outcomes.length === 0 ? "IDLE" : "PROCESSED");
+      } catch (error) {
+        const reason = safeWorkerReason(error);
+        health.loopFailed(reason);
+        jsonWorkerLogger({
+          role: "verifier",
+          event: "worker_loop_failed",
+          reason,
+        });
+      }
+    } else {
+      health.loopFailed("DEPENDENCY_UNAVAILABLE");
     }
     await sleep(config.pollIntervalMs);
   }
 }
 
-await main();
+main().catch((error: unknown) => {
+  const reason = safeWorkerReason(error);
+  jsonWorkerLogger({
+    role: "verifier",
+    event:
+      reason === "VERIFIER_SIGNER_IDENTITY_MISMATCH"
+        ? "signer_mismatch"
+        : "startup_configuration_failed",
+    reason,
+  });
+  process.exitCode = 1;
+});

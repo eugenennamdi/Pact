@@ -16,6 +16,7 @@
     "database:migrate": "npm run db:migrate --workspace=@pact/database",
     "deploy:arc": "npm run build --workspace=@pact/orchestrator && npm run deploy:arc --workspace=@pact/orchestrator",
     "operator:e2e": "npm run build --workspace=@pact/database && npm run build --workspace=@pact/orchestrator && npm run operator:e2e --workspace=@pact/orchestrator",
+    "product:migrate": "node scripts/product-migrate.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "kernel:test": "node scripts/test-certified-kernel.mjs",
@@ -23,10 +24,12 @@
     "lint": "eslint . --max-warnings 0",
     "test": "vitest run",
     "test:database-live": "npm run build --workspace=@pact/database && npm run test:live --workspace=@pact/database",
+    "test:web-start-smoke": "node scripts/smoke-web-start.mjs",
     "test:relay-e2e": "npm run build --workspace=@pact/database && npm run build --workspace=@pact/orchestrator && npm run test:e2e --workspace=@pact/orchestrator",
     "test:phase5-local": "npm run build --workspace=@pact/database && npm run build --workspace=@pact/orchestrator && npm run test:phase5-local --workspace=@pact/orchestrator",
     "test:phase5-staged-local": "npm run build --workspace=@pact/database && npm run build --workspace=@pact/orchestrator && npm run test:phase5-staged-local --workspace=@pact/orchestrator",
-    "typecheck": "npm run typecheck --workspaces --if-present"
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "web:start": "npm run start --workspace=@pact/web"
   },
   "devDependencies": {
     "@types/node": "26.6.3",
