@@ -17,6 +17,7 @@ import {
   computeDependencyFingerprint,
   loadCertifiedKernelManifest,
   parseCertifiedKernelManifest,
+  verifyDependencyProtection,
   verifyProtectedPaths,
 } from "./lib/certified-kernel.mjs";
 
@@ -24,7 +25,12 @@ const repository = resolve(process.cwd());
 const manifest = loadCertifiedKernelManifest(repository);
 const temporary = mkdtempSync(join(tmpdir(), "pact-kernel-negative-"));
 const fixture = join(temporary, "repository");
+const currentFixture = join(temporary, "current-repository");
 const results = [];
+
+function clone(value) {
+  return JSON.parse(JSON.stringify(value));
+}
 
 function record(name, expected, outcome) {
   results.push({ name, expected, outcome });
@@ -63,6 +69,15 @@ try {
     "git",
     ["clone", "--quiet", "--no-hardlinks", repository, fixture],
     { stdio: "inherit" },
+  );
+  execFileSync(
+    "git",
+    ["clone", "--quiet", "--no-hardlinks", repository, currentFixture],
+    { stdio: "inherit" },
+  );
+  writeFileSync(
+    join(currentFixture, "package-lock.json"),
+    readFileSync(join(repository, "package-lock.json"), "utf8"),
   );
   execFileSync(
     "git",
@@ -156,7 +171,7 @@ try {
     verifyProtectedPaths(fixture, manifest),
   );
 
-  const lockPath = join(fixture, "package-lock.json");
+  const lockPath = join(currentFixture, "package-lock.json");
   const originalLock = readFileSync(lockPath, "utf8");
   try {
     const lock = JSON.parse(originalLock);
@@ -169,7 +184,7 @@ try {
     };
     writeFileSync(lockPath, `${JSON.stringify(lock, null, 2)}\n`);
     const productFingerprint = computeDependencyFingerprint(
-      fixture,
+      currentFixture,
       manifest.dependencyProtection,
     ).fingerprint;
     record(
@@ -188,7 +203,7 @@ try {
     lock.packages["node_modules/viem"].integrity = "sha512-kernel-drift";
     writeFileSync(lockPath, `${JSON.stringify(lock, null, 2)}\n`);
     const kernelFingerprint = computeDependencyFingerprint(
-      fixture,
+      currentFixture,
       manifest.dependencyProtection,
     ).fingerprint;
     record(
@@ -200,6 +215,170 @@ try {
     );
   } finally {
     writeFileSync(lockPath, originalLock);
+  }
+
+  const historicalFingerprint = computeDependencyFingerprint(
+    fixture,
+    manifest.dependencyProtection,
+  ).fingerprint;
+  record(
+    "23 historical baseline dependency fingerprint",
+    "PASS",
+    historicalFingerprint === manifest.dependencyProtection.baselineFingerprint
+      ? "PASS"
+      : "FAIL",
+  );
+
+  expectPass("24 current effective dependency fingerprint", () =>
+    verifyDependencyProtection(currentFixture, manifest),
+  );
+
+  {
+    const candidate = clone(manifest);
+    candidate.dependencyProtection.maintenance = [];
+    expectFail("25 empty maintenance cannot hide fingerprint change", () =>
+      parseCertifiedKernelManifest(JSON.stringify(candidate)),
+    );
+  }
+
+  {
+    const candidate = clone(manifest);
+    candidate.dependencyProtection.maintenance[0].fromFingerprint = `sha256:${"0".repeat(64)}`;
+    expectFail("26 maintenance must start at baseline fingerprint", () =>
+      parseCertifiedKernelManifest(JSON.stringify(candidate)),
+    );
+  }
+
+  {
+    const candidate = clone(manifest);
+    candidate.dependencyProtection.maintenance[0].toFingerprint = `sha256:${"1".repeat(64)}`;
+    expectFail("27 maintenance must end at effective fingerprint", () =>
+      parseCertifiedKernelManifest(JSON.stringify(candidate)),
+    );
+  }
+
+  {
+    const candidate = clone(manifest);
+    candidate.dependencyProtection.maintenance.push(
+      clone(candidate.dependencyProtection.maintenance[0]),
+    );
+    expectFail("28 broken two-event maintenance chain", () =>
+      parseCertifiedKernelManifest(JSON.stringify(candidate)),
+    );
+  }
+
+  {
+    const candidate = clone(manifest);
+    candidate.dependencyProtection.maintenance[0].advisory =
+      "GHSA-aaaa-bbbb-cccc";
+    expectFail("29 tampered maintenance advisory", () =>
+      parseCertifiedKernelManifest(JSON.stringify(candidate)),
+    );
+  }
+
+  {
+    const candidate = clone(manifest);
+    candidate.dependencyProtection.maintenance[0].changes[0].package =
+      "source-map-js-tampered";
+    expectFail("30 tampered maintenance package", () =>
+      parseCertifiedKernelManifest(JSON.stringify(candidate)),
+    );
+  }
+
+  {
+    const candidate = clone(manifest);
+    candidate.dependencyProtection.maintenance[0].changes[0].from = "1.2.0";
+    expectFail("31 tampered maintenance from version", () =>
+      parseCertifiedKernelManifest(JSON.stringify(candidate)),
+    );
+  }
+
+  {
+    const candidate = clone(manifest);
+    candidate.dependencyProtection.maintenance[0].changes[0].to = "1.2.3";
+    expectFail("32 tampered maintenance to version", () =>
+      parseCertifiedKernelManifest(JSON.stringify(candidate)),
+    );
+  }
+
+  try {
+    const lock = JSON.parse(originalLock);
+    lock.packages["node_modules/viem"].integrity =
+      "sha512-unrecorded-kernel-drift";
+    writeFileSync(lockPath, `${JSON.stringify(lock, null, 2)}\n`);
+    expectFail("33 unrecorded protected dependency resolution", () =>
+      verifyDependencyProtection(currentFixture, manifest),
+    );
+  } finally {
+    writeFileSync(lockPath, originalLock);
+  }
+
+  try {
+    const lock = JSON.parse(originalLock);
+    lock.packages["node_modules/viem"].integrity =
+      "sha512-hidden-second-kernel-drift";
+    writeFileSync(lockPath, `${JSON.stringify(lock, null, 2)}\n`);
+    const candidate = clone(manifest);
+    const hiddenFingerprint = computeDependencyFingerprint(
+      currentFixture,
+      candidate.dependencyProtection,
+    ).fingerprint;
+    candidate.dependencyProtection.fingerprint = hiddenFingerprint;
+    candidate.dependencyProtection.maintenance[0].toFingerprint =
+      hiddenFingerprint;
+    expectFail("34 hidden second protected dependency change", () =>
+      verifyDependencyProtection(
+        currentFixture,
+        parseCertifiedKernelManifest(JSON.stringify(candidate)),
+      ),
+    );
+  } finally {
+    writeFileSync(lockPath, originalLock);
+  }
+
+  {
+    const candidate = clone(manifest);
+    candidate.dependencyProtection.maintenance.splice(0, 1);
+    expectFail("35 removing required maintenance event", () =>
+      parseCertifiedKernelManifest(JSON.stringify(candidate)),
+    );
+  }
+
+  try {
+    const lock = JSON.parse(originalLock);
+    lock.packages["apps/web"].dependencies["product-only-schema-v2"] = "1.0.0";
+    lock.packages["node_modules/product-only-schema-v2"] = {
+      version: "1.0.0",
+      resolved:
+        "https://registry.npmjs.org/product-only-schema-v2/-/product-only-schema-v2-1.0.0.tgz",
+      integrity: "sha512-product-only-schema-v2",
+    };
+    writeFileSync(lockPath, `${JSON.stringify(lock, null, 2)}\n`);
+    expectPass("36 schema V2 product-only dependency addition", () =>
+      verifyDependencyProtection(currentFixture, manifest),
+    );
+  } finally {
+    writeFileSync(lockPath, originalLock);
+  }
+
+  try {
+    const lock = JSON.parse(originalLock);
+    lock.packages["node_modules/viem"].integrity =
+      "sha512-schema-v2-kernel-drift";
+    writeFileSync(lockPath, `${JSON.stringify(lock, null, 2)}\n`);
+    expectFail("37 schema V2 kernel dependency mutation", () =>
+      verifyDependencyProtection(currentFixture, manifest),
+    );
+  } finally {
+    writeFileSync(lockPath, originalLock);
+  }
+
+  {
+    const candidate = clone(manifest);
+    candidate.dependencyProtection.unreviewed = true;
+    expectFail("38 malformed schema V2", () =>
+      parseCertifiedKernelManifest(JSON.stringify(candidate)),
+    );
   }
 
   console.log(`[certified-kernel-test] PASS: ${results.length} cases`);

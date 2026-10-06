@@ -108,6 +108,14 @@ const TOP_LEVEL_KEYS = Object.freeze([
   "dependencyProtection",
 ]);
 
+const REVIEWED_DEPENDENCY_MAINTENANCE = Object.freeze({
+  "source-map-js:1.2.1->1.2.2": Object.freeze({
+    type: "SECURITY_PATCH",
+    advisory: "GHSA-68fv-2mgg-jv7q",
+    classification: "BUILD_TOOLING_ONLY",
+  }),
+});
+
 export class KernelVerificationError extends Error {
   constructor(code, message, details = []) {
     super(message);
@@ -148,6 +156,104 @@ function hash32(value, label) {
     fail("MALFORMED_MANIFEST", `${label} must be a lowercase bytes32 hash`);
 }
 
+function dependencyFingerprint(value, label) {
+  if (typeof value !== "string" || !/^sha256:[0-9a-f]{64}$/.test(value))
+    fail("MALFORMED_MANIFEST", `${label} must be a sha256 fingerprint`);
+}
+
+function validateDependencyMaintenance(protection) {
+  const maintenance = protection.maintenance;
+  if (!Array.isArray(maintenance))
+    fail("MALFORMED_MANIFEST", "dependency maintenance must be an array");
+  let expectedFrom = protection.baselineFingerprint;
+  for (const [index, event] of maintenance.entries()) {
+    const label = `dependencyProtection.maintenance[${index}]`;
+    strictKeys(
+      event,
+      [
+        "schemaVersion",
+        "type",
+        "advisory",
+        "changes",
+        "fromFingerprint",
+        "toFingerprint",
+        "classification",
+      ],
+      label,
+    );
+    if (event.schemaVersion !== 1)
+      fail("MALFORMED_MANIFEST", `${label}.schemaVersion must equal 1`);
+    if (event.type !== "SECURITY_PATCH")
+      fail("MALFORMED_MANIFEST", `${label}.type is not reviewed`);
+    if (
+      typeof event.advisory !== "string" ||
+      !/^GHSA-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}$/.test(event.advisory)
+    )
+      fail("MALFORMED_MANIFEST", `${label}.advisory is malformed`);
+    if (event.classification !== "BUILD_TOOLING_ONLY")
+      fail("MALFORMED_MANIFEST", `${label}.classification is not reviewed`);
+    dependencyFingerprint(event.fromFingerprint, `${label}.fromFingerprint`);
+    dependencyFingerprint(event.toFingerprint, `${label}.toFingerprint`);
+    if (event.fromFingerprint === event.toFingerprint)
+      fail(
+        "MALFORMED_MANIFEST",
+        `${label} must change the dependency fingerprint`,
+      );
+    if (event.fromFingerprint !== expectedFrom)
+      fail(
+        "DEPENDENCY_MAINTENANCE_CHAIN_BROKEN",
+        `${label}.fromFingerprint is not contiguous`,
+      );
+    if (!Array.isArray(event.changes) || event.changes.length === 0)
+      fail("MALFORMED_MANIFEST", `${label}.changes must not be empty`);
+    const packages = new Set();
+    for (const [changeIndex, change] of event.changes.entries()) {
+      const changeLabel = `${label}.changes[${changeIndex}]`;
+      strictKeys(change, ["package", "from", "to"], changeLabel);
+      if (
+        typeof change.package !== "string" ||
+        !/^(?:@[a-z0-9._-]+\/)?[a-z0-9._-]+$/.test(change.package)
+      )
+        fail("MALFORMED_MANIFEST", `${changeLabel}.package is malformed`);
+      if (
+        typeof change.from !== "string" ||
+        typeof change.to !== "string" ||
+        !/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(change.from) ||
+        !/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(change.to)
+      )
+        fail("MALFORMED_MANIFEST", `${changeLabel} versions are malformed`);
+      if (change.from === change.to)
+        fail("MALFORMED_MANIFEST", `${changeLabel} versions must differ`);
+      if (packages.has(change.package))
+        fail(
+          "MALFORMED_MANIFEST",
+          `${label} contains duplicate package changes`,
+        );
+      packages.add(change.package);
+      const reviewed =
+        REVIEWED_DEPENDENCY_MAINTENANCE[
+          `${change.package}:${change.from}->${change.to}`
+        ];
+      if (
+        reviewed === undefined ||
+        event.type !== reviewed.type ||
+        event.advisory !== reviewed.advisory ||
+        event.classification !== reviewed.classification
+      )
+        fail(
+          "UNREVIEWED_DEPENDENCY_MAINTENANCE",
+          `${changeLabel} is not an explicitly reviewed maintenance change`,
+        );
+    }
+    expectedFrom = event.toFingerprint;
+  }
+  if (expectedFrom !== protection.fingerprint)
+    fail(
+      "DEPENDENCY_MAINTENANCE_CHAIN_BROKEN",
+      "maintenance chain does not terminate at the effective fingerprint",
+    );
+}
+
 function canonical(value) {
   if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
   if (typeof value === "object" && value !== null) {
@@ -171,7 +277,7 @@ export function parseCertifiedKernelManifest(text) {
     fail("MALFORMED_MANIFEST", "certified-kernel.json is not valid JSON");
   }
   strictKeys(manifest, TOP_LEVEL_KEYS, "certified-kernel.json");
-  exact(manifest.schemaVersion, 1, "schemaVersion");
+  exact(manifest.schemaVersion, 2, "schemaVersion");
   exact(manifest.protocolVersion, "pact-v1", "protocolVersion");
   for (const [field, expected] of Object.entries(EXPECTED_PROVENANCE)) {
     fullCommit(manifest[field], field);
@@ -242,7 +348,15 @@ export function parseCertifiedKernelManifest(text) {
 
   strictKeys(
     manifest.dependencyProtection,
-    ["lockfile", "lockfileVersion", "selectedDependencies", "fingerprint"],
+    [
+      "lockfile",
+      "lockfileVersion",
+      "selectedDependencies",
+      "baselineFingerprint",
+      "fingerprint",
+      "resolvedDependencyEntries",
+      "maintenance",
+    ],
     "dependencyProtection",
   );
   exact(
@@ -268,8 +382,25 @@ export function parseCertifiedKernelManifest(text) {
     )
       fail("MALFORMED_MANIFEST", `invalid dependency roots for ${importer}`);
   }
-  if (!/^sha256:[0-9a-f]{64}$/.test(manifest.dependencyProtection.fingerprint))
-    fail("MALFORMED_MANIFEST", "dependency fingerprint must be sha256");
+  dependencyFingerprint(
+    manifest.dependencyProtection.baselineFingerprint,
+    "dependencyProtection.baselineFingerprint",
+  );
+  dependencyFingerprint(
+    manifest.dependencyProtection.fingerprint,
+    "dependencyProtection.fingerprint",
+  );
+  if (
+    !Number.isSafeInteger(
+      manifest.dependencyProtection.resolvedDependencyEntries,
+    ) ||
+    manifest.dependencyProtection.resolvedDependencyEntries <= 0
+  )
+    fail(
+      "MALFORMED_MANIFEST",
+      "resolvedDependencyEntries must be a positive integer",
+    );
+  validateDependencyMaintenance(manifest.dependencyProtection);
   return Object.freeze(manifest);
 }
 
@@ -403,10 +534,7 @@ function dependencyFields(record) {
   return fields;
 }
 
-export function computeDependencyFingerprint(repository, protection) {
-  const lock = JSON.parse(
-    readFileSync(join(repository, protection.lockfile), "utf8"),
-  );
+function computeDependencySnapshotFromLock(lock, protection) {
   exact(
     lock.lockfileVersion,
     protection.lockfileVersion,
@@ -492,6 +620,153 @@ export function computeDependencyFingerprint(repository, protection) {
   return {
     fingerprint: sha256(canonical(payload)),
     packageCount: included.size,
+    packageEntries: payload.packages,
+  };
+}
+
+export function computeDependencyFingerprint(repository, protection) {
+  const lock = JSON.parse(
+    readFileSync(join(repository, protection.lockfile), "utf8"),
+  );
+  return computeDependencySnapshotFromLock(lock, protection);
+}
+
+function dependencyPackageName(path) {
+  const marker = path.lastIndexOf("node_modules/");
+  return marker === -1 ? path : path.slice(marker + "node_modules/".length);
+}
+
+function dependencyFieldsWithoutArtifactIdentity(fields) {
+  return Object.fromEntries(
+    Object.entries(fields).filter(
+      ([key]) => !["version", "resolved", "integrity"].includes(key),
+    ),
+  );
+}
+
+function verifyDependencyMaintenanceDiff(baseline, current, maintenance) {
+  const expected = new Map();
+  for (const event of maintenance) {
+    for (const change of event.changes) {
+      const existing = expected.get(change.package);
+      if (existing === undefined) {
+        expected.set(change.package, { from: change.from, to: change.to });
+      } else {
+        if (existing.to !== change.from)
+          fail(
+            "DEPENDENCY_MAINTENANCE_VERSION_CHAIN_BROKEN",
+            `${change.package} maintenance versions are not contiguous`,
+          );
+        existing.to = change.to;
+      }
+    }
+  }
+
+  const baselineEntries = new Map(baseline.packageEntries);
+  const currentEntries = new Map(current.packageEntries);
+  const paths = new Set([...baselineEntries.keys(), ...currentEntries.keys()]);
+  const seen = new Set();
+  const changes = [];
+  for (const path of [...paths].sort()) {
+    const before = baselineEntries.get(path);
+    const after = currentEntries.get(path);
+    if (canonical(before) === canonical(after)) continue;
+    if (before === undefined || after === undefined)
+      fail(
+        "DEPENDENCY_MAINTENANCE_DIFF_MISMATCH",
+        `selected dependency entry was added or removed: ${path}`,
+      );
+    const packageName = dependencyPackageName(path);
+    const reviewed = expected.get(packageName);
+    if (reviewed === undefined)
+      fail(
+        "DEPENDENCY_MAINTENANCE_DIFF_MISMATCH",
+        `unrecorded selected dependency change: ${path}`,
+      );
+    if (before.version !== reviewed.from || after.version !== reviewed.to)
+      fail(
+        "DEPENDENCY_MAINTENANCE_DIFF_MISMATCH",
+        `${packageName} versions do not match the maintenance record`,
+      );
+    if (
+      canonical(dependencyFieldsWithoutArtifactIdentity(before)) !==
+      canonical(dependencyFieldsWithoutArtifactIdentity(after))
+    )
+      fail(
+        "DEPENDENCY_MAINTENANCE_DIFF_MISMATCH",
+        `${packageName} changed fields beyond version/resolved/integrity`,
+      );
+    seen.add(packageName);
+    changes.push({
+      package: packageName,
+      from: before.version,
+      to: after.version,
+      path,
+    });
+  }
+  for (const packageName of expected.keys()) {
+    if (!seen.has(packageName))
+      fail(
+        "DEPENDENCY_MAINTENANCE_DIFF_MISMATCH",
+        `recorded maintenance has no selected dependency change: ${packageName}`,
+      );
+  }
+  return changes;
+}
+
+export function verifyDependencyProtection(repository, manifest) {
+  const protection = manifest.dependencyProtection;
+  let baselineLock;
+  try {
+    baselineLock = JSON.parse(
+      runGit(repository, [
+        "show",
+        `${manifest.certifiedBaselineCommit}:${protection.lockfile}`,
+      ]),
+    );
+  } catch {
+    fail(
+      "DEPENDENCY_BASELINE_LOCK_MISSING",
+      "historical certified dependency lockfile is unavailable",
+    );
+  }
+  const baseline = computeDependencySnapshotFromLock(baselineLock, protection);
+  if (baseline.fingerprint !== protection.baselineFingerprint)
+    fail(
+      "DEPENDENCY_BASELINE_FINGERPRINT_MISMATCH",
+      "historical dependency closure does not match its immutable fingerprint",
+      [
+        `expected=${protection.baselineFingerprint}`,
+        `actual=${baseline.fingerprint}`,
+      ],
+    );
+  const current = computeDependencyFingerprint(repository, protection);
+  if (current.fingerprint !== protection.fingerprint)
+    fail(
+      "KERNEL_DEPENDENCY_DRIFT",
+      "resolved certified-kernel dependency closure changed",
+      [`expected=${protection.fingerprint}`, `actual=${current.fingerprint}`],
+    );
+  if (current.packageCount !== protection.resolvedDependencyEntries)
+    fail(
+      "DEPENDENCY_ENTRY_COUNT_MISMATCH",
+      "resolved dependency entry count changed",
+      [
+        `expected=${protection.resolvedDependencyEntries}`,
+        `actual=${current.packageCount}`,
+      ],
+    );
+  const changes = verifyDependencyMaintenanceDiff(
+    baseline,
+    current,
+    protection.maintenance,
+  );
+  return {
+    packageCount: current.packageCount,
+    baselineFingerprint: baseline.fingerprint,
+    fingerprint: current.fingerprint,
+    maintenanceEvents: protection.maintenance.length,
+    changes,
   };
 }
 
@@ -502,6 +777,11 @@ export function assertDependencyProtection(repository, protection) {
       "KERNEL_DEPENDENCY_DRIFT",
       "resolved certified-kernel dependency closure changed",
       [`expected=${protection.fingerprint}`, `actual=${result.fingerprint}`],
+    );
+  if (result.packageCount !== protection.resolvedDependencyEntries)
+    fail(
+      "DEPENDENCY_ENTRY_COUNT_MISMATCH",
+      "resolved dependency entry count changed",
     );
   return result;
 }
@@ -669,10 +949,7 @@ export async function runKernelVerification(repository = process.cwd()) {
   const manifest = loadCertifiedKernelManifest(root);
   const paths = verifyProtectedPaths(root, manifest);
   verifyProvenance(root, manifest);
-  const dependencies = assertDependencyProtection(
-    root,
-    manifest.dependencyProtection,
-  );
+  const dependencies = verifyDependencyProtection(root, manifest);
   const contracts = verifyContractArtifacts(root, manifest.contractArtifacts);
   const certifications = await verifyCertificationManifests(root, manifest);
   return {
@@ -680,6 +957,15 @@ export async function runKernelVerification(repository = process.cwd()) {
     protocolVersion: manifest.protocolVersion,
     protectedFileCount: paths.protectedFileCount,
     dependencyPackageCount: dependencies.packageCount,
+    dependencyVerification: {
+      historicalBaselineFingerprint: "PASS",
+      maintenanceChain: "PASS",
+      currentEffectiveFingerprint: "PASS",
+      baselineFingerprint: dependencies.baselineFingerprint,
+      fingerprint: dependencies.fingerprint,
+      maintenanceEvents: dependencies.maintenanceEvents,
+      changes: dependencies.changes,
+    },
     contracts,
     certifications,
     provenance: {
