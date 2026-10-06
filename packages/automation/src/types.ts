@@ -87,10 +87,17 @@ export type WorkerLogger = (event: WorkerLogEvent) => void;
 export interface WorkerHealthSnapshot {
   readonly role: "verifier" | "relay";
   readonly ready: boolean;
+  readonly configuration: "READY" | "FAILED";
   readonly database: "UNKNOWN" | "READY" | "FAILED";
   readonly arcRpc: "UNKNOWN" | "READY" | "FAILED";
   readonly github?: "UNKNOWN" | "READY" | "FAILED";
-  readonly signerAddress: string;
+  readonly signerIdentity: "READY" | "FAILED";
+  readonly relayBalance?: "UNKNOWN" | "READY" | "FAILED";
+  readonly relayBalanceWei?: bigint;
+  readonly relayRequiredWei?: bigint;
+  readonly unresolvedBroadcastUnknown?: number;
   readonly lastSuccessfulLoop: string | null;
+  readonly lastLoopResult: string | null;
+  readonly stale: boolean;
   readonly lastFailure: string | null;
 }
