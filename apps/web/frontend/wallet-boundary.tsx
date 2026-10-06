@@ -22,6 +22,7 @@ import {
   WalletDiscovery,
   bindWalletEvents,
   connectWallet,
+  parseWalletChainId,
   switchToArcTestnet,
   type DiscoveredWalletProvider,
   type Eip1193Provider,
@@ -57,6 +58,60 @@ interface WalletContextValue {
 
 const WalletContext = createContext<WalletContextValue | null>(null);
 const api = createProductApiClient();
+
+const LAST_WALLET_RDNS_KEY = "pact:last_wallet_provider_rdns";
+const LAST_WALLET_UUID_KEY = "pact:last_wallet_provider_uuid";
+const AUTH_SESSION_KEY = "pact:auth_session";
+
+function getStoredValue(key: string): string | null {
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function setStoredValue(key: string, value: string): void {
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    // Ignore storage quota or access issues
+  }
+}
+
+function removeStoredValue(key: string): void {
+  try {
+    window.localStorage.removeItem(key);
+  } catch {
+    // Ignore storage access issues
+  }
+}
+
+function getStoredSession(): BrowserAuthState | null {
+  try {
+    const raw = window.sessionStorage.getItem(AUTH_SESSION_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as BrowserAuthState;
+  } catch {
+    return null;
+  }
+}
+
+function setStoredSession(session: BrowserAuthState): void {
+  try {
+    window.sessionStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(session));
+  } catch {
+    // Ignore storage quota or access issues
+  }
+}
+
+function removeStoredSession(): void {
+  try {
+    window.sessionStorage.removeItem(AUTH_SESSION_KEY);
+  } catch {
+    // Ignore storage access issues
+  }
+}
 
 function isRabbyProvider(item: DiscoveredWalletProvider): boolean {
   return (
@@ -221,6 +276,7 @@ export function WalletBoundary({ children }: { readonly children: ReactNode }) {
 
   const clearSession = useCallback(() => {
     setSession(null);
+    removeStoredSession();
     void api.logout().catch(() => undefined);
   }, []);
 
@@ -234,17 +290,74 @@ export function WalletBoundary({ children }: { readonly children: ReactNode }) {
     };
   }, []);
 
+  const autoConnectingRef = useRef(false);
+
+  useEffect(() => {
+    if (address !== null || busy || autoConnectingRef.current) return;
+    const lastRdns = getStoredValue(LAST_WALLET_RDNS_KEY);
+    const lastUuid = getStoredValue(LAST_WALLET_UUID_KEY);
+    if (!lastRdns && !lastUuid) return;
+
+    const matched = providers.find(
+      (item) =>
+        (lastRdns && item.info.rdns === lastRdns) ||
+        (lastUuid && item.info.uuid === lastUuid),
+    );
+    if (!matched) return;
+
+    autoConnectingRef.current = true;
+    void (async () => {
+      try {
+        const accounts = (await matched.provider.request({
+          method: "eth_accounts",
+        })) as unknown;
+        if (
+          Array.isArray(accounts) &&
+          typeof accounts[0] === "string" &&
+          /^0x[0-9a-f]{40}$/i.test(accounts[0])
+        ) {
+          const nextAddress = accounts[0] as `0x${string}`;
+          const chain = await matched.provider.request({
+            method: "eth_chainId",
+          });
+          const nextChainId = parseWalletChainId(chain);
+          setSelectedProviderId(matched.info.uuid);
+          setAddress(nextAddress);
+          setChainId(nextChainId);
+
+          const savedSession = getStoredSession();
+          if (
+            savedSession &&
+            isBrowserSessionValid(savedSession, nextAddress, nextChainId)
+          ) {
+            setSession(savedSession);
+          } else {
+            removeStoredSession();
+          }
+        }
+      } catch {
+        // Silent reconnection failure leaves interface in clean disconnected state
+      } finally {
+        autoConnectingRef.current = false;
+      }
+    })();
+  }, [address, busy, providers]);
+
   useEffect(() => {
     if (provider === null || address === null) return;
     return bindWalletEvents(provider, {
       accountsChanged: (accounts) => {
         clearSession();
         const next = accounts[0];
-        setAddress(
-          next !== undefined && /^0x[0-9a-f]{40}$/i.test(next)
-            ? (next as `0x${string}`)
-            : null,
-        );
+        if (next !== undefined && /^0x[0-9a-f]{40}$/i.test(next)) {
+          setAddress(next as `0x${string}`);
+        } else {
+          removeStoredValue(LAST_WALLET_RDNS_KEY);
+          removeStoredValue(LAST_WALLET_UUID_KEY);
+          setSelectedProviderId(null);
+          setAddress(null);
+          setChainId(null);
+        }
         setAccountDialogOpen(false);
       },
       chainChanged: (nextChainId) => {
@@ -253,6 +366,8 @@ export function WalletBoundary({ children }: { readonly children: ReactNode }) {
       },
       disconnected: () => {
         clearSession();
+        removeStoredValue(LAST_WALLET_RDNS_KEY);
+        removeStoredValue(LAST_WALLET_UUID_KEY);
         setSelectedProviderId(null);
         setAddress(null);
         setChainId(null);
@@ -302,14 +417,19 @@ export function WalletBoundary({ children }: { readonly children: ReactNode }) {
       setAddress(null);
       setChainId(null);
       setSession(null);
+      removeStoredSession();
       setBusy(true);
       setMessage(null);
       try {
         const connected = await connectWallet(selected.provider);
+        setStoredValue(LAST_WALLET_RDNS_KEY, selected.info.rdns);
+        setStoredValue(LAST_WALLET_UUID_KEY, selected.info.uuid);
         setAddress(connected.address);
         setChainId(connected.chainId);
         setConnectModalOpen(false);
       } catch (error) {
+        removeStoredValue(LAST_WALLET_RDNS_KEY);
+        removeStoredValue(LAST_WALLET_UUID_KEY);
         setMessage(walletErrorMessage(error, "connect"));
       } finally {
         setBusy(false);
@@ -323,11 +443,17 @@ export function WalletBoundary({ children }: { readonly children: ReactNode }) {
     setBusy(true);
     setMessage(null);
     try {
-      setSession(
-        await authenticateWallet({ client: api, provider, address, chainId }),
-      );
+      const nextSession = await authenticateWallet({
+        client: api,
+        provider,
+        address,
+        chainId,
+      });
+      setSession(nextSession);
+      setStoredSession(nextSession);
     } catch (error) {
       setSession(null);
+      removeStoredSession();
       setMessage(walletErrorMessage(error, "sign-in"));
     } finally {
       setBusy(false);
@@ -347,6 +473,7 @@ export function WalletBoundary({ children }: { readonly children: ReactNode }) {
       setAddress(connected.address);
       setChainId(connected.chainId);
       setSession(null);
+      removeStoredSession();
     } catch (error) {
       setMessage(walletErrorMessage(error, "switch-network"));
     } finally {
@@ -361,6 +488,9 @@ export function WalletBoundary({ children }: { readonly children: ReactNode }) {
     } catch {
       // Local wallet/session separation is still cleared if the server is down.
     } finally {
+      removeStoredValue(LAST_WALLET_RDNS_KEY);
+      removeStoredValue(LAST_WALLET_UUID_KEY);
+      removeStoredSession();
       setSelectedProviderId(null);
       setAddress(null);
       setChainId(null);
@@ -602,7 +732,6 @@ export function WalletHeaderControl() {
       aria-label={`Open wallet account ${truncateWalletAddress(wallet.address)}`}
       onClick={wallet.openAccountDialog}
     >
-      <span className="account-status-dot" aria-hidden="true" />
       {truncateWalletAddress(wallet.address)}
     </button>
   );
