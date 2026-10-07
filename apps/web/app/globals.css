@@ -73,6 +73,331 @@
   --duration-normal: 220ms;
 }
 
+/* ==========================================================================
+   Canonical Proof Center
+   ========================================================================== */
+
+.proof-center {
+  max-width: 72rem;
+}
+
+.proof-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 2rem;
+  margin-bottom: 2rem;
+}
+
+.proof-header .lede {
+  margin-bottom: 0;
+}
+
+.proof-network-switcher {
+  display: inline-flex;
+  padding: 0.25rem;
+  gap: 0.25rem;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-muted);
+  box-shadow: var(--shadow-xs);
+}
+
+.proof-network-switcher a {
+  min-width: 6.75rem;
+  padding: 0.55rem 1rem;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  text-align: center;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+}
+
+.proof-network-switcher a.active {
+  background: var(--bg-dark);
+  color: var(--text-inverse);
+  box-shadow: var(--shadow-sm);
+}
+
+.proof-outcome {
+  position: relative;
+  overflow: hidden;
+  padding: clamp(1.5rem, 4vw, 2.5rem);
+  border: 1px solid var(--accent-verified-border);
+  border-radius: var(--radius-xl);
+  background:
+    radial-gradient(circle at 95% 5%, rgba(13, 110, 70, 0.11), transparent 32%),
+    var(--bg-surface);
+  box-shadow: var(--shadow-md);
+}
+
+.proof-outcome-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  margin-bottom: 1.2rem;
+}
+
+.proof-outcome h2 {
+  max-width: 42rem;
+  margin-bottom: 0.5rem;
+  font-size: clamp(1.55rem, 3vw, 2.2rem);
+}
+
+.proof-outcome > p {
+  max-width: 48rem;
+}
+
+.proof-key-facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0;
+  margin-top: 2rem;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.proof-key-facts > div {
+  min-width: 0;
+  padding: 1rem 1.15rem;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.proof-key-facts > div:nth-child(odd) {
+  border-right: 1px solid var(--border-subtle);
+}
+
+.proof-key-facts > div:nth-last-child(-n + 2) {
+  border-bottom: 0;
+}
+
+.proof-key-facts span:first-child,
+.proof-step-kind,
+.proof-read-only {
+  display: block;
+  margin-bottom: 0.35rem;
+  color: var(--text-muted);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.proof-key-facts strong {
+  display: block;
+  overflow-wrap: anywhere;
+  font-size: 0.875rem;
+}
+
+.proof-value-with-link {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.7rem;
+}
+
+.proof-value-with-link > a {
+  color: var(--accent-verified);
+  font-size: 0.75rem;
+  font-weight: 650;
+}
+
+.proof-section {
+  margin-top: 3rem;
+}
+
+.proof-section-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.2rem;
+}
+
+.proof-section-heading .eyebrow {
+  margin-bottom: 0.2rem;
+}
+
+.proof-read-only {
+  margin: 0;
+  padding: 0.35rem 0.6rem;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-full);
+}
+
+.proof-timeline {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.proof-timeline > li {
+  position: relative;
+  display: grid;
+  grid-template-columns: 2rem minmax(0, 1fr);
+  gap: 1rem;
+  padding-bottom: 1rem;
+}
+
+.proof-timeline > li:not(:last-child)::before {
+  position: absolute;
+  top: 2rem;
+  bottom: 0;
+  left: 0.9375rem;
+  width: 1px;
+  background: var(--accent-verified-border);
+  content: "";
+}
+
+.proof-step-check {
+  z-index: 1;
+  display: grid;
+  width: 2rem;
+  height: 2rem;
+  place-items: center;
+  border: 1px solid var(--accent-verified-border);
+  border-radius: var(--radius-full);
+  background: var(--accent-verified-bg);
+  color: var(--accent-verified);
+  font-weight: 800;
+}
+
+.proof-step-body {
+  min-width: 0;
+  padding: 1rem 1.15rem;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-xs);
+}
+
+.proof-step-title {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.proof-step-title h3 {
+  margin-bottom: 0.7rem;
+}
+
+.proof-step-kind {
+  margin-bottom: 0.15rem;
+}
+
+.proof-step-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1rem;
+  margin-bottom: 0.8rem;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+.proof-details-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.8rem;
+}
+
+.proof-details-grid details {
+  min-width: 0;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-xs);
+}
+
+.proof-details-grid summary {
+  padding: 1rem 1.15rem;
+  cursor: pointer;
+  font-weight: 650;
+}
+
+.proof-details-grid details[open] summary {
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.proof-details-grid dl {
+  margin: 0;
+  padding: 0.3rem 1.15rem 1rem;
+}
+
+.proof-detail-row {
+  display: grid;
+  grid-template-columns: minmax(7.5rem, 0.35fr) minmax(0, 1fr);
+  gap: 1rem;
+  padding: 0.7rem 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.proof-detail-row:last-child {
+  border-bottom: 0;
+}
+
+.proof-detail-row dt,
+.proof-detail-row dd {
+  margin: 0;
+}
+
+.proof-detail-row dt {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+.proof-detail-row dd {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 0.8rem;
+}
+
+.proof-detail-row .tech-address-wrapper {
+  align-items: flex-start;
+  max-width: 100%;
+}
+
+.proof-detail-row .tech-hash {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 700px) {
+  .proof-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .proof-network-switcher,
+  .proof-network-switcher a {
+    flex: 1;
+  }
+
+  .proof-key-facts,
+  .proof-details-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .proof-key-facts > div,
+  .proof-key-facts > div:nth-child(odd),
+  .proof-key-facts > div:nth-last-child(-n + 2) {
+    border-right: 0;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+
+  .proof-key-facts > div:last-child {
+    border-bottom: 0;
+  }
+
+  .proof-detail-row {
+    grid-template-columns: 1fr;
+    gap: 0.3rem;
+  }
+}
+
 /* Base Reset */
 *,
 *::before,

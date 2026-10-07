@@ -15,10 +15,7 @@ export default function Home() {
           <Link className="button-link" href="/create">
             Create a Pact
           </Link>
-          <Link
-            className="button-link secondary"
-            href="/proof/arc-mainnet/job/1"
-          >
+          <Link className="button-link secondary" href="/proof">
             View Mainnet proof
           </Link>
         </div>
@@ -113,7 +110,7 @@ export default function Home() {
             Mainnet (Chain ID 5042).
           </p>
         </div>
-        <Link className="button-link secondary" href="/proof/arc-mainnet/job/1">
+        <Link className="button-link secondary" href="/proof">
           Inspect Mainnet proof
         </Link>
       </section>
