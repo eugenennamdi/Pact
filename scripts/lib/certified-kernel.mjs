@@ -8,7 +8,9 @@ import { keccak256 } from "viem";
 
 export const EXPECTED_PROVENANCE = Object.freeze({
   certifiedBaselineCommit: "3d6e6b34c42166b5c3c72dc51abd664de5966af8",
-  testnetCertifiedRuntimeCommit: "fa20328df6643b0d85f6c2b6074d79dd0e5de54c",
+  testnetCertifiedRuntimeCommit: "92932adab77a246a4492bc08464d13d38263366e",
+  historicalMainnetTestnetCertifiedRuntimeCommit:
+    "fa20328df6643b0d85f6c2b6074d79dd0e5de54c",
   mainnetExecutionReleaseCommit: "b5792c756b04fae543b1d3d92a337858ea9f529d",
   erc8183SourceCommit: "142e669c1fd318486a4628395b629f033654dd06",
 });
@@ -69,6 +71,9 @@ export const REQUIRED_PROTECTED_PATHS = Object.freeze([
   "packages/orchestrator/src/webhook.test.ts",
   "packages/orchestrator/src/relay/**",
   "packages/orchestrator/src/deployment/**",
+  "packages/orchestrator/src/recovery.ts",
+  "packages/orchestrator/src/recovery.test.ts",
+  "packages/orchestrator/src/recovery.local-e2e.test.ts",
   "packages/database/package.json",
   "packages/database/tsconfig.json",
   "packages/database/drizzle.config.ts",
@@ -110,6 +115,10 @@ const TOP_LEVEL_KEYS = Object.freeze([
 
 const DEPENDENCY_MAINTENANCE_CLASSIFICATIONS = Object.freeze(
   new Set(["BUILD_TOOLING_ONLY", "DEPLOYED_APPLICATION_RUNTIME"]),
+);
+
+const SOURCE_MAINTENANCE_CLASSIFICATIONS = Object.freeze(
+  new Set(["SECURITY_SENSITIVE_RECOVERY_KERNEL"]),
 );
 
 export class KernelVerificationError extends Error {
@@ -246,6 +255,91 @@ function validateDependencyMaintenance(protection) {
     );
 }
 
+function validateSourceMaintenance(manifest) {
+  if (manifest.sourceMaintenance === undefined) return;
+  const maintenance = manifest.sourceMaintenance;
+  if (!Array.isArray(maintenance))
+    fail("MALFORMED_MANIFEST", "sourceMaintenance must be an array");
+  for (const [index, event] of maintenance.entries()) {
+    const label = `sourceMaintenance[${index}]`;
+    strictKeys(
+      event,
+      [
+        "schemaVersion",
+        "type",
+        "review",
+        "baselineCommit",
+        "targetBaselineCommit",
+        "classification",
+        "changes",
+      ],
+      label,
+    );
+    if (event.schemaVersion !== 1)
+      fail("MALFORMED_MANIFEST", `${label}.schemaVersion must equal 1`);
+    if (event.type !== "ATTESTATION_RECOVERY_PATCH")
+      fail("MALFORMED_MANIFEST", `${label}.type is not reviewed`);
+    if (event.review !== "TASK_A_APPROVED")
+      fail("MALFORMED_MANIFEST", `${label}.review must equal TASK_A_APPROVED`);
+    fullCommit(event.baselineCommit, `${label}.baselineCommit`);
+    exact(
+      event.baselineCommit,
+      manifest.certifiedBaselineCommit,
+      `${label}.baselineCommit`,
+    );
+    fullCommit(event.targetBaselineCommit, `${label}.targetBaselineCommit`);
+    if (!SOURCE_MAINTENANCE_CLASSIFICATIONS.has(event.classification))
+      fail("MALFORMED_MANIFEST", `${label}.classification is not reviewed`);
+    if (!Array.isArray(event.changes) || event.changes.length === 0)
+      fail("MALFORMED_MANIFEST", `${label}.changes must not be empty`);
+    const paths = new Set();
+    let previousPath = "";
+    for (const [changeIndex, change] of event.changes.entries()) {
+      const changeLabel = `${label}.changes[${changeIndex}]`;
+      strictKeys(
+        change,
+        ["path", "fromHash", "toHash", "fromGitBlob", "toGitBlob", "reason"],
+        changeLabel,
+      );
+      if (typeof change.path !== "string" || change.path.length === 0)
+        fail("MALFORMED_MANIFEST", `${changeLabel}.path is malformed`);
+      if (typeof change.reason !== "string" || change.reason.length === 0)
+        fail("MALFORMED_MANIFEST", `${changeLabel}.reason is malformed`);
+      if (
+        change.fromHash !== null &&
+        (typeof change.fromHash !== "string" ||
+          !/^sha256:[0-9a-f]{64}$/.test(change.fromHash))
+      )
+        fail("MALFORMED_MANIFEST", `${changeLabel}.fromHash is malformed`);
+      if (
+        typeof change.toHash !== "string" ||
+        !/^sha256:[0-9a-f]{64}$/.test(change.toHash)
+      )
+        fail("MALFORMED_MANIFEST", `${changeLabel}.toHash is malformed`);
+      if (
+        change.fromGitBlob !== null &&
+        (typeof change.fromGitBlob !== "string" ||
+          !/^[0-9a-f]{40}$/.test(change.fromGitBlob))
+      )
+        fail("MALFORMED_MANIFEST", `${changeLabel}.fromGitBlob is malformed`);
+      if (
+        typeof change.toGitBlob !== "string" ||
+        !/^[0-9a-f]{40}$/.test(change.toGitBlob)
+      )
+        fail("MALFORMED_MANIFEST", `${changeLabel}.toGitBlob is malformed`);
+      if (paths.has(change.path))
+        fail("MALFORMED_MANIFEST", `${label} contains duplicate path changes`);
+      if (previousPath !== "" && previousPath.localeCompare(change.path) >= 0)
+        fail(
+          "MALFORMED_MANIFEST",
+          `${label}.changes must use ascending path order`,
+        );
+      paths.add(change.path);
+      previousPath = change.path;
+    }
+  }
+}
+
 function canonical(value) {
   if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
   if (typeof value === "object" && value !== null) {
@@ -268,7 +362,11 @@ export function parseCertifiedKernelManifest(text) {
   } catch {
     fail("MALFORMED_MANIFEST", "certified-kernel.json is not valid JSON");
   }
-  strictKeys(manifest, TOP_LEVEL_KEYS, "certified-kernel.json");
+  const topKeys =
+    manifest.sourceMaintenance !== undefined
+      ? [...TOP_LEVEL_KEYS, "sourceMaintenance"]
+      : TOP_LEVEL_KEYS;
+  strictKeys(manifest, topKeys, "certified-kernel.json");
   exact(manifest.schemaVersion, 2, "schemaVersion");
   exact(manifest.protocolVersion, "pact-v1", "protocolVersion");
   for (const [field, expected] of Object.entries(EXPECTED_PROVENANCE)) {
@@ -393,6 +491,7 @@ export function parseCertifiedKernelManifest(text) {
       "resolvedDependencyEntries must be a positive integer",
     );
   validateDependencyMaintenance(manifest.dependencyProtection);
+  validateSourceMaintenance(manifest);
   return Object.freeze(manifest);
 }
 
@@ -444,11 +543,22 @@ export function verifyProtectedPaths(repository, manifest) {
   ])
     .split("\n")
     .filter(Boolean);
+  const sourceMaintenancePaths = new Set(
+    (manifest.sourceMaintenance ?? []).flatMap((event) =>
+      event.changes.map((c) => c.path),
+    ),
+  );
   for (const pattern of manifest.protectedPaths) {
-    if (!baselineFiles.some((path) => globRegex(pattern).test(path)))
+    const existsAtBaseline = baselineFiles.some((path) =>
+      globRegex(pattern).test(path),
+    );
+    const existsInMaintenance = [...sourceMaintenancePaths].some((path) =>
+      globRegex(pattern).test(path),
+    );
+    if (!existsAtBaseline && !existsInMaintenance)
       fail(
         "UNKNOWN_PROTECTED_PATH",
-        `protected path does not exist at baseline: ${pattern}`,
+        `protected path does not exist at baseline or certified maintenance: ${pattern}`,
       );
   }
   const changed = runGit(repository, [
@@ -471,16 +581,196 @@ export function verifyProtectedPaths(repository, manifest) {
     .filter(Boolean)
     .filter((path) => matchesAny(path, manifest.protectedPaths));
   const drift = [...new Set([...changed, ...untracked])].sort();
-  if (drift.length > 0)
+  const historicalProtectedFileCount = baselineFiles.filter((path) =>
+    matchesAny(path, manifest.protectedPaths),
+  ).length;
+  const currentFiles = runGit(repository, ["ls-files"])
+    .split("\n")
+    .filter(Boolean);
+  const currentProtectedFileCount = currentFiles.filter((path) =>
+    matchesAny(path, manifest.protectedPaths),
+  ).length;
+
+  if (drift.length === 0) {
+    return {
+      protectedFileCount: historicalProtectedFileCount,
+      historicalProtectedFileCount,
+      currentProtectedFileCount: historicalProtectedFileCount,
+      certifiedChangesCount: 0,
+    };
+  }
+  if (!manifest.sourceMaintenance || manifest.sourceMaintenance.length === 0) {
     fail(
       "PROTECTED_SOURCE_DRIFT",
       `${drift.length} protected path(s) differ from the certified baseline`,
       drift,
     );
+  }
+  const reviewedChanges = new Map();
+  for (const event of manifest.sourceMaintenance) {
+    for (const change of event.changes) {
+      if (reviewedChanges.has(change.path)) {
+        fail(
+          "DUPLICATE_SOURCE_CHANGE",
+          `duplicate certified change for ${change.path}`,
+        );
+      }
+      reviewedChanges.set(change.path, change);
+    }
+  }
+  const unreviewed = drift.filter((path) => !reviewedChanges.has(path));
+  if (unreviewed.length > 0) {
+    fail(
+      "PROTECTED_SOURCE_DRIFT",
+      `${unreviewed.length} protected path(s) differ from the certified baseline without review`,
+      unreviewed,
+    );
+  }
+  const missingFromDrift = [...reviewedChanges.keys()].filter(
+    (path) => !drift.includes(path),
+  );
+  if (missingFromDrift.length > 0) {
+    fail(
+      "PROTECTED_SOURCE_DRIFT",
+      `${missingFromDrift.length} certified source change(s) are missing from the working tree`,
+      missingFromDrift,
+    );
+  }
+
+  for (const event of manifest.sourceMaintenance) {
+    try {
+      runGit(repository, [
+        "cat-file",
+        "-e",
+        `${event.targetBaselineCommit}^{commit}`,
+      ]);
+    } catch {
+      fail(
+        "TARGET_BASELINE_COMMIT_MISSING",
+        `targetBaselineCommit does not exist in git: ${event.targetBaselineCommit}`,
+      );
+    }
+    try {
+      execFileSync(
+        "git",
+        ["merge-base", "--is-ancestor", event.targetBaselineCommit, "HEAD"],
+        { cwd: repository, stdio: "ignore" },
+      );
+    } catch {
+      fail(
+        "TARGET_BASELINE_NOT_ANCESTOR",
+        `targetBaselineCommit ${event.targetBaselineCommit} is not an ancestor of HEAD`,
+      );
+    }
+    for (const change of event.changes) {
+      let targetBlob;
+      try {
+        targetBlob = runGit(repository, [
+          "rev-parse",
+          `${event.targetBaselineCommit}:${change.path}`,
+        ]);
+      } catch {
+        fail(
+          "TARGET_FILE_MISSING",
+          `target baseline commit missing file: ${change.path}`,
+        );
+      }
+      if (targetBlob !== change.toGitBlob) {
+        fail(
+          "TARGET_BLOB_MISMATCH",
+          `${change.path} git blob in ${event.targetBaselineCommit} does not match certified toGitBlob`,
+          [`expected=${change.toGitBlob}`, `actual=${targetBlob}`],
+        );
+      }
+      const targetContent = execFileSync(
+        "git",
+        ["show", `${event.targetBaselineCommit}:${change.path}`],
+        { cwd: repository },
+      );
+      const targetSha = sha256(targetContent);
+      if (targetSha !== change.toHash) {
+        fail(
+          "TARGET_HASH_MISMATCH",
+          `${change.path} content hash in ${event.targetBaselineCommit} does not match certified toHash`,
+          [`expected=${change.toHash}`, `actual=${targetSha}`],
+        );
+      }
+    }
+  }
+
+  for (const path of drift) {
+    const reviewed = reviewedChanges.get(path);
+    const absolute = join(repository, path);
+    if (!existsSync(absolute)) {
+      fail("MISSING_PROTECTED_FILE", `certified file does not exist: ${path}`);
+    }
+    const currentContent = readFileSync(absolute);
+    const currentSha = sha256(currentContent);
+    if (currentSha !== reviewed.toHash) {
+      fail(
+        "PROTECTED_SOURCE_DRIFT",
+        `${path} content hash does not match certified target hash`,
+        [`expected=${reviewed.toHash}`, `actual=${currentSha}`],
+      );
+    }
+    const currentBlob = runGit(repository, ["hash-object", path]);
+    if (currentBlob !== reviewed.toGitBlob) {
+      fail(
+        "PROTECTED_SOURCE_DRIFT",
+        `${path} git blob hash does not match certified target git blob`,
+        [`expected=${reviewed.toGitBlob}`, `actual=${currentBlob}`],
+      );
+    }
+    if (reviewed.fromHash !== null) {
+      let baselineContent;
+      try {
+        baselineContent = execFileSync("git", ["show", `${baseline}:${path}`], {
+          cwd: repository,
+        });
+      } catch {
+        fail(
+          "BASELINE_FILE_MISSING",
+          `historical baseline missing file: ${path}`,
+        );
+      }
+      const baselineSha = sha256(baselineContent);
+      if (baselineSha !== reviewed.fromHash) {
+        fail(
+          "BASELINE_HASH_MISMATCH",
+          `${path} baseline hash mismatch in maintenance record`,
+          [`expected=${reviewed.fromHash}`, `actual=${baselineSha}`],
+        );
+      }
+      let baselineBlob;
+      try {
+        baselineBlob = runGit(repository, ["rev-parse", `${baseline}:${path}`]);
+      } catch {
+        fail(
+          "BASELINE_FILE_MISSING",
+          `historical baseline missing blob: ${path}`,
+        );
+      }
+      if (baselineBlob !== reviewed.fromGitBlob) {
+        fail(
+          "BASELINE_HASH_MISMATCH",
+          `${path} baseline git blob mismatch in maintenance record`,
+          [`expected=${reviewed.fromGitBlob}`, `actual=${baselineBlob}`],
+        );
+      }
+    } else {
+      if (baselineFiles.includes(path)) {
+        fail(
+          "NEW_FILE_BASELINE_CONFLICT",
+          `${path} is declared new but exists at baseline`,
+        );
+      }
+    }
+  }
   return {
-    protectedFileCount: baselineFiles.filter((path) =>
-      matchesAny(path, manifest.protectedPaths),
-    ).length,
+    protectedFileCount: currentProtectedFileCount,
+    historicalProtectedFileCount,
+    currentProtectedFileCount,
+    certifiedChangesCount: drift.length,
   };
 }
 
@@ -832,6 +1122,7 @@ export function verifyContractArtifacts(repository, contractConfig) {
 export function verifyProvenance(repository, manifest) {
   const {
     testnetCertifiedRuntimeCommit,
+    historicalMainnetTestnetCertifiedRuntimeCommit,
     mainnetExecutionReleaseCommit,
     certifiedBaselineCommit,
   } = manifest;
@@ -839,7 +1130,7 @@ export function verifyProvenance(repository, manifest) {
     !gitSucceeds(repository, [
       "merge-base",
       "--is-ancestor",
-      testnetCertifiedRuntimeCommit,
+      historicalMainnetTestnetCertifiedRuntimeCommit,
       mainnetExecutionReleaseCommit,
     ])
   )
@@ -858,6 +1149,18 @@ export function verifyProvenance(repository, manifest) {
     fail(
       "PROVENANCE_ANCESTRY_FAILURE",
       "Mainnet release is not an ancestor of evidence baseline",
+    );
+  if (
+    !gitSucceeds(repository, [
+      "merge-base",
+      "--is-ancestor",
+      testnetCertifiedRuntimeCommit,
+      "HEAD",
+    ])
+  )
+    fail(
+      "PROVENANCE_ANCESTRY_FAILURE",
+      "Active Testnet-certified runtime is not an ancestor of the current release",
     );
   return true;
 }
@@ -906,8 +1209,8 @@ async function verifyCertificationManifests(repository, manifest) {
   );
   exact(
     mainnet.mainnetGate?.testnetCertifiedRuntimeCommit,
-    manifest.testnetCertifiedRuntimeCommit,
-    "mainnet manifest testnet provenance",
+    manifest.historicalMainnetTestnetCertifiedRuntimeCommit,
+    "historical mainnet manifest testnet provenance",
   );
   exact(
     mainnet.erc8183.sourceCommit,
@@ -932,6 +1235,8 @@ export async function runKernelVerification(repository = process.cwd()) {
     status: "PASS",
     protocolVersion: manifest.protocolVersion,
     protectedFileCount: paths.protectedFileCount,
+    historicalProtectedFileCount: paths.historicalProtectedFileCount,
+    currentProtectedFileCount: paths.currentProtectedFileCount,
     dependencyPackageCount: dependencies.packageCount,
     dependencyVerification: {
       historicalBaselineFingerprint: "PASS",

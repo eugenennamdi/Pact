@@ -53,7 +53,10 @@ import type {
 
 const enabled = process.env.PACT_PRODUCT_LOCAL_E2E === "1";
 const describeLocal = enabled ? describe : describe.skip;
-const ANVIL = "/Users/apple/.foundry/bin/anvil";
+const ANVIL =
+  process.env.PACT_ANVIL_BIN?.trim() ||
+  process.env.ANVIL_BIN?.trim() ||
+  "anvil";
 const PORT = Number(process.env.PACT_PRODUCT_LOCAL_E2E_PORT ?? "58648");
 const RPC_URL = `http://127.0.0.1:${PORT}`;
 const BUDGET = 1_000n;

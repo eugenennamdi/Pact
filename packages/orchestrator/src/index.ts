@@ -24,6 +24,16 @@ export {
 } from "./service.js";
 export { assertAllowedTransition, operationTransitions } from "./state.js";
 export {
+  assertExpiredAttestationRecoveryPreflight,
+  assertMainnetRecoveryApproval,
+  createExpiredAttestationRecoveryService,
+  expiredAttestationRecoveryTrigger,
+  type ExpiredAttestationRecoveryIdentity,
+  type ExpiredAttestationRecoveryOptions,
+  type ExpiredAttestationRecoveryPreflight,
+  type FreshReadyToRelayResult,
+} from "./recovery.js";
+export {
   pactCompletionAcceptedEvent,
   pactRelayAbi,
   relayErc8183Abi,

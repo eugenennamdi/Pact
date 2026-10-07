@@ -267,6 +267,102 @@ function ProofDetails({ proof }: { readonly proof: SettlementProofArtifact }) {
   );
 }
 
+function RecoveryLineage({
+  proof,
+}: {
+  readonly proof: SettlementProofArtifact;
+}) {
+  const lineage = proof.recovery;
+  if (lineage === undefined) return null;
+  return (
+    <section className="proof-section" aria-labelledby="recovery-heading">
+      <div className="proof-section-heading">
+        <div>
+          <p className="eyebrow">Immutable audit trail</p>
+          <h2 id="recovery-heading">Recovery lineage</h2>
+        </div>
+        <span className="proof-read-only">One relay broadcast</span>
+      </div>
+      <ol className="proof-timeline">
+        <li>
+          <span className="proof-step-check" aria-hidden="true">
+            ✓
+          </span>
+          <div className="proof-step-body">
+            <div className="proof-step-title">
+              <div>
+                <span className="proof-step-kind">Expired attestation</span>
+                <h3>Retired unsent</h3>
+              </div>
+              <span className="badge badge-verified">Zero capability</span>
+            </div>
+            <div className="proof-step-meta">
+              <span>{lineage.historical.operationState}</span>
+              <span>{lineage.historical.relayState}</span>
+              <span>Broadcasts {lineage.historical.broadcastAttemptCount}</span>
+            </div>
+            <HashDisplay hash={lineage.historical.attestationDigest} />
+          </div>
+        </li>
+        <li>
+          <span className="proof-step-check" aria-hidden="true">
+            ✓
+          </span>
+          <div className="proof-step-body">
+            <div className="proof-step-title">
+              <div>
+                <span className="proof-step-kind">Fresh verification</span>
+                <h3>Evidence regenerated</h3>
+              </div>
+              <span className="badge badge-verified">Verified</span>
+            </div>
+            <HashDisplay hash={lineage.recovery.evidenceHash} />
+          </div>
+        </li>
+        <li>
+          <span className="proof-step-check" aria-hidden="true">
+            ✓
+          </span>
+          <div className="proof-step-body">
+            <div className="proof-step-title">
+              <div>
+                <span className="proof-step-kind">Fresh attestation</span>
+                <h3>Signed for relay</h3>
+              </div>
+              <span className="badge badge-verified">Fresh</span>
+            </div>
+            <HashDisplay hash={lineage.recovery.attestationDigest} />
+          </div>
+        </li>
+        <li>
+          <span className="proof-step-check" aria-hidden="true">
+            ✓
+          </span>
+          <div className="proof-step-body">
+            <div className="proof-step-title">
+              <div>
+                <span className="proof-step-kind">Relay settlement</span>
+                <h3>One broadcast · completed</h3>
+              </div>
+              <span className="badge badge-verified">Final</span>
+            </div>
+            <div className="proof-step-meta">
+              <span>
+                Nonce {lineage.relayNonceBefore} → {lineage.relayNonceAfter}
+              </span>
+              <span>Broadcasts {proof.relay.broadcastCount}</span>
+            </div>
+            <ExplorerTransaction
+              proof={proof}
+              hash={proof.relay.transactionHash}
+            />
+          </div>
+        </li>
+      </ol>
+    </section>
+  );
+}
+
 export function ProofCenter({
   proof,
 }: {
@@ -284,6 +380,14 @@ export function ProofCenter({
               ? "Live USDC settlement on Arc Mainnet."
               : "Hosted end-to-end product lifecycle on Arc Testnet."}
           </p>
+          {isMainnet && (
+            <p className="proof-read-only">
+              Mainnet proofs:{" "}
+              <Link href="/proof/arc-mainnet/job/1">Job #1</Link>
+              {" · "}
+              <Link href="/proof/arc-mainnet/job/2">Job #2</Link>
+            </p>
+          )}
         </div>
         <nav className="proof-network-switcher" aria-label="Proof network">
           <Link
@@ -425,6 +529,8 @@ export function ProofCenter({
           </li>
         </ol>
       </section>
+
+      <RecoveryLineage proof={proof} />
 
       <section className="proof-section" aria-labelledby="details-heading">
         <div className="proof-section-heading">

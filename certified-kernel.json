@@ -2,7 +2,8 @@
   "schemaVersion": 2,
   "protocolVersion": "pact-v1",
   "certifiedBaselineCommit": "3d6e6b34c42166b5c3c72dc51abd664de5966af8",
-  "testnetCertifiedRuntimeCommit": "fa20328df6643b0d85f6c2b6074d79dd0e5de54c",
+  "testnetCertifiedRuntimeCommit": "92932adab77a246a4492bc08464d13d38263366e",
+  "historicalMainnetTestnetCertifiedRuntimeCommit": "fa20328df6643b0d85f6c2b6074d79dd0e5de54c",
   "mainnetExecutionReleaseCommit": "b5792c756b04fae543b1d3d92a337858ea9f529d",
   "erc8183SourceCommit": "142e669c1fd318486a4628395b629f033654dd06",
   "protectedPaths": [
@@ -52,6 +53,9 @@
     "packages/orchestrator/src/webhook.test.ts",
     "packages/orchestrator/src/relay/**",
     "packages/orchestrator/src/deployment/**",
+    "packages/orchestrator/src/recovery.ts",
+    "packages/orchestrator/src/recovery.test.ts",
+    "packages/orchestrator/src/recovery.local-e2e.test.ts",
     "packages/database/package.json",
     "packages/database/tsconfig.json",
     "packages/database/drizzle.config.ts",
@@ -302,5 +306,193 @@
         "classification": "DEPLOYED_APPLICATION_RUNTIME"
       }
     ]
-  }
+  },
+  "sourceMaintenance": [
+    {
+      "schemaVersion": 1,
+      "type": "ATTESTATION_RECOVERY_PATCH",
+      "review": "TASK_A_APPROVED",
+      "baselineCommit": "3d6e6b34c42166b5c3c72dc51abd664de5966af8",
+      "targetBaselineCommit": "c046fc45aa50c7e1d46aec9c42d4e7ef5e552f65",
+      "classification": "SECURITY_SENSITIVE_RECOVERY_KERNEL",
+      "changes": [
+        {
+          "path": "deployments/arc-testnet.json",
+          "fromHash": "sha256:6b724fddf9aec57b7ecd2d5ca5d8619ecd32663d0644c98d15fe94a35ab5f895",
+          "toHash": "sha256:e98f180dc29a082fbbac60cbb1785590d5ed5b564979173e4cb742be4af861f6",
+          "fromGitBlob": "8942fa7f0963867cde9852f694133381f2f51c47",
+          "toGitBlob": "e924e78223f40b9f6e7e5b835c0da42490277b72",
+          "reason": "Persist the completed Arc Testnet Job 9 recovery certification as the active executable runtime evidence."
+        },
+        {
+          "path": "packages/database/src/index.ts",
+          "fromHash": "sha256:062cda3bca8512e195c733506424c0fa68247e628103cc881bd63c82596e3cfe",
+          "toHash": "sha256:d4a77913a8b83e54547ef2a3fc44745b5709dc17f4d392214baf88f272487ba5",
+          "fromGitBlob": "795cdd56a54d86225b89c5d5f9f916c7b632ecbe",
+          "toGitBlob": "9d73f0ffb15c4eed67acf9afffca1b00cad49b15",
+          "reason": "Export recovery inspection and atomic retirement primitives from relay repository and types."
+        },
+        {
+          "path": "packages/database/src/live-test.ts",
+          "fromHash": "sha256:deca54d3c08455fd9a823a4c91a87fa017ca80151ca9d909696c1967dd975e48",
+          "toHash": "sha256:c2963ad4dcd4a23ce8baff4907377739e750a9df33f1421d3e5ad25ff75a755b",
+          "fromGitBlob": "35c25991a007f25500c34faf018cf420213a5401",
+          "toGitBlob": "9d35f998106d63cc1285f518c25ddf9327f9af55",
+          "reason": "Add live database invariant test groups 31-34 for recovery retirement, repeated recovery cycles, advisory lock, and state modeling."
+        },
+        {
+          "path": "packages/database/src/relay-repository.ts",
+          "fromHash": "sha256:e08a9d41a253cbb1204a9a7bc2eec82abbb8f00da235fede2eceaee2516d2087",
+          "toHash": "sha256:f14831721001298a50b88c0e9f197778e13c40be6dd2604d8ba5dd62d6cae369",
+          "fromGitBlob": "316aec94e1cd4178bd29f4fd1662b87769caefde",
+          "toGitBlob": "638d56e6e8d78a27ae0f96bdcc33cd0d82335823",
+          "reason": "Add digest-scoped inspectHistoricalRecoveryState and transactional retireExpiredUnsentAndEnqueueRecovery with advisory lock."
+        },
+        {
+          "path": "packages/database/src/repository.ts",
+          "fromHash": "sha256:8a757877f5853391bab50dcd65616c03182ee42625288b0cd921eb9cf89737ee",
+          "toHash": "sha256:db98ff3269f5b88c09916d2aceb8953bfb51fb37e52f9da617ba620972007630",
+          "fromGitBlob": "1a5b5ef2d8d598071aa22f8c6932dcb545710014",
+          "toGitBlob": "48a84af89d7ae720957d8f86ffe6461c4613dde2",
+          "reason": "Implement getAttestationArtifact for historical attestation inspection across active and expired operations."
+        },
+        {
+          "path": "packages/database/src/types.ts",
+          "fromHash": "sha256:9779ce99091f66c8d01be69e1907fae37e67305d9d0e21ce9dcfd2e30b139352",
+          "toHash": "sha256:05fb66b325c7da897e99f9dfac8470c7cbc7194eee023b00952b5c3ceccb2f1d",
+          "fromGitBlob": "f73c89bdce80f9b74cd15e324ada2176200afd1d",
+          "toGitBlob": "c4e0e347a2ffcdb3c2c5e07515b2d82751d00cd0",
+          "reason": "Define TypeScript types for recovery parameters, return values, and historical state shapes."
+        },
+        {
+          "path": "packages/orchestrator/package.json",
+          "fromHash": "sha256:d9c865aa117b3d2e0f45abfd80a9d6fd067ae0365b32364762f775bfda08eac3",
+          "toHash": "sha256:32be837ff014f924049818307292b48336ee7492c50a06ff58c07d474e38c993",
+          "fromGitBlob": "37aeec387428cf305acf01edb7daa6fa43c22f35",
+          "toGitBlob": "25e72cbaf4d3b986b8f283a47dc1efcbd3a2428d",
+          "reason": "Register recover:expired-attestation CLI deployment script."
+        },
+        {
+          "path": "packages/orchestrator/src/deployment/anvil-executable.test.ts",
+          "fromHash": null,
+          "toHash": "sha256:d0c88d85feed4f448eb34273adca8c99377cffa62a5cbb0cb298fca9b2fee28e",
+          "fromGitBlob": null,
+          "toGitBlob": "5e8f8e7a020e3b77cd726ba87b715942be6d6984",
+          "reason": "Test explicit Anvil overrides, PATH default resolution, and absence of the macOS-only executable path."
+        },
+        {
+          "path": "packages/orchestrator/src/deployment/anvil-executable.ts",
+          "fromHash": null,
+          "toHash": "sha256:d040e2d2313a5804ca1fc60b3f69d8e98e439c0387a7c12e629caea457f8473b",
+          "fromGitBlob": null,
+          "toGitBlob": "76667303a2a745f9a6643c7724d46566e2963ef6",
+          "reason": "Resolve Anvil portably from reviewed test-only overrides or PATH."
+        },
+        {
+          "path": "packages/orchestrator/src/deployment/local-e2e.ts",
+          "fromHash": "sha256:081603189696f7711ed93d9e4524f9201a103d30edab093fcafdf198ea75d360",
+          "toHash": "sha256:586309082008d0cbd99acaa878878232f870fcbb41f7b805743343bfde3ec0d0",
+          "fromGitBlob": "dd03ac0f317ec8d5452ad24eda67b285d29df3cc",
+          "toGitBlob": "98a1a937e8b4800c18d36f74e998e545d90f1f86",
+          "reason": "Use the shared PATH-resolved Anvil executable in the local deployment E2E harness."
+        },
+        {
+          "path": "packages/orchestrator/src/deployment/mainnet-release.test.ts",
+          "fromHash": "sha256:c46a753e1eba37c629f1a1b5501bb2ce7f8fb6c2c17438df1a5de00c194e5b96",
+          "toHash": "sha256:6ceaa17374b864476b727d28ccc30208f0c11a1b374290079011714940b80115",
+          "fromGitBlob": "a4b966ad6218df322f3625d7b80bc779ad29dc61",
+          "toGitBlob": "c05d934341570287f3f31ff1ed88e11fb5116497",
+          "reason": "Add real Git inspection and exact release-control allowlist tests for active Testnet provenance."
+        },
+        {
+          "path": "packages/orchestrator/src/deployment/mainnet-release.ts",
+          "fromHash": "sha256:0f2360663d9277148d39819872dcc3319a1bf40909714071d8dbd0c7408f9660",
+          "toHash": "sha256:9ada995e5752085c5cab476c506a03d54b82c740d5cd9a9efb508d3da1e57daa",
+          "fromGitBlob": "038c46fd020fc73c423acfd35aab0431fb71411d",
+          "toGitBlob": "41d9bc9dddc8048b502d451762a22b49264e7b63",
+          "reason": "Pin the reviewed validator blob and allow only the exact manifest release-control files after Job 9 certification."
+        },
+        {
+          "path": "packages/orchestrator/src/deployment/manifest.test.ts",
+          "fromHash": "sha256:f115c6ff97410ce82916975689c42ea95a2b6623daecfc509cd5a6863568ec74",
+          "toHash": "sha256:b1f92078ef2b13e6b9151ef668d0b2d0fea277ed32026e3b200cd737b88424b2",
+          "fromGitBlob": "898ec6f3e762a7582abb06d9a6546eebe4351043",
+          "toGitBlob": "f904158a9e7b6878ffa81833f8ae833649bfbad6",
+          "reason": "Test active-versus-historical Testnet certification semantics and cryptographic Testnet result binding."
+        },
+        {
+          "path": "packages/orchestrator/src/deployment/manifest.ts",
+          "fromHash": "sha256:f1464f1e74ba18e940c590b8a382e1fdbacba0702b19a233b2192925594fd290",
+          "toHash": "sha256:693ceafcf8e8dbca35bc3bbde84e5952d3d6c03b51f32077aae65a106ee0ca3f",
+          "fromGitBlob": "133c6426d010726ca7685005e624d5509ad4b661",
+          "toGitBlob": "38d34744ba5c888dda7bfbcfa64fe9a9ddf0564f",
+          "reason": "Separate immutable historical Mainnet provenance from the active Testnet-certified runtime and bind Testnet result fields."
+        },
+        {
+          "path": "packages/orchestrator/src/deployment/recover-expired-attestation.ts",
+          "fromHash": null,
+          "toHash": "sha256:088d2556b2bf72b87d4a3b8ccbf25cfb8d0c5d9caf1a3bce9ba98ceccc06faf3",
+          "fromGitBlob": null,
+          "toGitBlob": "a1693ef4b46f00fdae5c4acf898d34932eabba10",
+          "reason": "Add standalone CLI entrypoint for expired attestation recovery with mainnet authorization guard."
+        },
+        {
+          "path": "packages/orchestrator/src/deployment/recovery-state.test.ts",
+          "fromHash": null,
+          "toHash": "sha256:3ba8574a6df579110d04c9ffcf4766e5b7d36ac48845ce19045785740db09560",
+          "fromGitBlob": null,
+          "toGitBlob": "7ead0f2eb03322d75ca18610462929871a364769",
+          "reason": "Add unit tests for recovery operator stage transitions, condition observation, and file locking."
+        },
+        {
+          "path": "packages/orchestrator/src/deployment/recovery-state.ts",
+          "fromHash": null,
+          "toHash": "sha256:a3cf81d2e32717ee600373ee77b5dc6fb5dcd0392853cba0fce2922e399fcff2",
+          "fromGitBlob": null,
+          "toGitBlob": "371d70e3a383215d158b256564961cfef37dbd77",
+          "reason": "Implement recovery operator state manager with tri-state condition observation and block timestamp control."
+        },
+        {
+          "path": "packages/orchestrator/src/index.ts",
+          "fromHash": "sha256:3e649d968fba1984522857b3dc10020156315dce5347629ac22c4762697b6580",
+          "toHash": "sha256:e4c673870298b169f466f473e623a6365c34327dca91a5512bdfbf1f0e8bca42",
+          "fromGitBlob": "7e4276b77046e64bff0e1c382a73f20761ec594c",
+          "toGitBlob": "85c9f7356d7000d569f3aec597723558fb60eef4",
+          "reason": "Re-export recovery service, preflight assertion, and mainnet approval gate functions and types."
+        },
+        {
+          "path": "packages/orchestrator/src/recovery.local-e2e.test.ts",
+          "fromHash": null,
+          "toHash": "sha256:6b61da3a0e4501f57f783978e1e90efd7757ca5ba0c04b4b4687d065ef638e50",
+          "fromGitBlob": null,
+          "toGitBlob": "069a486d740d47a06b65788f77493b663995967e",
+          "reason": "Add the local Anvil + PostgreSQL recovery E2E suite and resolve Anvil portably from overrides or PATH."
+        },
+        {
+          "path": "packages/orchestrator/src/recovery.test.ts",
+          "fromHash": null,
+          "toHash": "sha256:4921d588b49da468c28a5e772216a6b90899c84d47063f12659e1118caf4dcb6",
+          "fromGitBlob": null,
+          "toGitBlob": "c9d8416972f2fc0f2cb73f377bb93396e907c77f",
+          "reason": "Add unit and invariant tests for attestation recovery service, preflight guards, and state validation."
+        },
+        {
+          "path": "packages/orchestrator/src/recovery.ts",
+          "fromHash": null,
+          "toHash": "sha256:b8b56093add141fec52f9a7f44cb02742b7ff72df3b2b80565fe0df330a6c018",
+          "fromGitBlob": null,
+          "toGitBlob": "7949a3831b8803e35fb2cf06bfd4ad5496fb0656",
+          "reason": "Implement core attestation recovery service with preflight invariant assertions and idempotency."
+        },
+        {
+          "path": "packages/orchestrator/src/relay/e2e.ts",
+          "fromHash": "sha256:06dbde4744443e8ee3967a6ffcb1ce931f8f9346864e8fb67af43b052af1bdf6",
+          "toHash": "sha256:b7c2d2673c60e71aaf81a3f5a74c55de808aa9addaf86c9991f799b1a2bc9a22",
+          "fromGitBlob": "4efc9bfacad44155bfa9316720b4e5cd3bc37bea",
+          "toGitBlob": "39cb9ec50ce445ecb03725fe8349d4cdc7f702ec",
+          "reason": "Use the shared PATH-resolved Anvil executable in the relay E2E harness."
+        }
+      ]
+    }
+  ]
 }

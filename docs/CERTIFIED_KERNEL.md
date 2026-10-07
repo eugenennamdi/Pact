@@ -39,6 +39,20 @@ Generated outputs are not authoritative. Future dependency maintenance requires
 explicit review, an exact closure diff, security audit, full regression, and a
 new append-only maintenance record.
 
+Protected source recovery corrections (such as Task A attestation recovery) are
+recorded in `sourceMaintenance` within `certified-kernel.json`. Each protected
+source file change is explicitly pinned by historical baseline hash (`fromHash`,
+`fromGitBlob`) and approved target hash (`toHash`, `toGitBlob`), anchored to an
+immutable `targetBaselineCommit` verified in Git history.
+`npm run kernel:verify` strictly validates that:
+
+1. `targetBaselineCommit` exists in Git and is an ancestor of HEAD.
+2. `targetBaselineCommit` contains the exact target blobs and content hashes.
+3. Working tree drift against the certified baseline matches the reviewed record
+   with zero unreviewed drift and zero missing records.
+4. Both historical protected file count (at baseline commit) and current
+   protected file count (at candidate release) are verified and reported.
+
 Product pages, components, DTOs, `packages/product/**`, and `apps/worker/**` may
 be added outside the protected paths. Product-only dependencies may be added
 when they do not alter the selected certified dependency closure.

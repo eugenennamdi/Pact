@@ -538,6 +538,69 @@ try {
     );
   }
 
+  {
+    const candidate = clone(manifest);
+    candidate.sourceMaintenance[0].targetBaselineCommit = "not-a-commit";
+    expectFail(
+      "55 invalid source maintenance targetBaselineCommit fails parse",
+      () => parseCertifiedKernelManifest(JSON.stringify(candidate)),
+    );
+  }
+
+  {
+    const candidate = clone(manifest);
+    candidate.sourceMaintenance[0].classification = "UNREVIEWED_CLASSIFICATION";
+    expectFail(
+      "56 unreviewed source maintenance classification fails parse",
+      () => parseCertifiedKernelManifest(JSON.stringify(candidate)),
+    );
+  }
+
+  {
+    const candidate = clone(manifest);
+    const first = candidate.sourceMaintenance[0].changes[0];
+    const second = candidate.sourceMaintenance[0].changes[1];
+    candidate.sourceMaintenance[0].changes[0] = second;
+    candidate.sourceMaintenance[0].changes[1] = first;
+    expectFail("57 out-of-order source maintenance changes fail parse", () =>
+      parseCertifiedKernelManifest(JSON.stringify(candidate)),
+    );
+  }
+
+  {
+    const candidate = clone(manifest);
+    candidate.sourceMaintenance[0].changes[0].toHash =
+      "sha256:0000000000000000000000000000000000000000000000000000000000000000";
+    expectFail("58 tampered target hash fails verification", () =>
+      verifyProtectedPaths(repository, candidate),
+    );
+  }
+
+  {
+    const candidate = clone(manifest);
+    candidate.sourceMaintenance[0].targetBaselineCommit =
+      "0123456789abcdef0123456789abcdef01234567";
+    expectFail("59 nonexistent targetBaselineCommit fails verification", () =>
+      verifyProtectedPaths(repository, candidate),
+    );
+  }
+
+  {
+    const candidate = clone(manifest);
+    candidate.testnetCertifiedRuntimeCommit = "0".repeat(40);
+    expectFail("60 active Testnet certification drift fails parse", () =>
+      parseCertifiedKernelManifest(JSON.stringify(candidate)),
+    );
+  }
+
+  {
+    const candidate = clone(manifest);
+    candidate.historicalMainnetTestnetCertifiedRuntimeCommit = "0".repeat(40);
+    expectFail("61 historical Mainnet certification drift fails parse", () =>
+      parseCertifiedKernelManifest(JSON.stringify(candidate)),
+    );
+  }
+
   console.log(`[certified-kernel-test] PASS: ${results.length} cases`);
   console.log(JSON.stringify({ status: "PASS", cases: results }));
 } finally {

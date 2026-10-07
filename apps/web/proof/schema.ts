@@ -39,6 +39,35 @@ export interface ProofTransaction {
   };
 }
 
+export interface ProofRecoveryLineage {
+  readonly historical: {
+    readonly operationId: string;
+    readonly evidenceHash: string;
+    readonly attestationDigest: string;
+    readonly verifiedAt: string;
+    readonly validUntil: string;
+    readonly operationState: "EXPIRED";
+    readonly attestationActive: false;
+    readonly relayState: "EXPIRED_UNSENT";
+    readonly relayCode: "ATTESTATION_OR_JOB_EXPIRED";
+    readonly nonce: null;
+    readonly calldata: null;
+    readonly serializedTransaction: null;
+    readonly expectedTxHash: null;
+    readonly returnedTxHash: null;
+    readonly broadcastAttemptCount: 0;
+  };
+  readonly recovery: {
+    readonly operationId: string;
+    readonly evidenceHash: string;
+    readonly attestationDigest: string;
+    readonly verifiedAt: string;
+    readonly validUntil: string;
+  };
+  readonly relayNonceBefore: number;
+  readonly relayNonceAfter: number;
+}
+
 export interface SettlementProofArtifact {
   readonly schemaVersion: typeof PROOF_SCHEMA_VERSION;
   readonly artifactId: string;
@@ -159,6 +188,7 @@ export interface SettlementProofArtifact {
     readonly residualAllowance: "0";
     readonly gasUnit: "ARC_NATIVE_18_DECIMALS";
   };
+  readonly recovery?: ProofRecoveryLineage;
   readonly sourceProvenance: {
     readonly proofSourceCommit: string;
     readonly deploymentCommit: string;
@@ -282,6 +312,93 @@ export function validateSettlementProofArtifact(
   requirePattern(relay.transactionHash, HEX_32, "relay transaction hash");
   if (relay.broadcastCount !== 1 || relay.broadcastUnknownCount !== 0) {
     throw new Error("relay broadcast identity is invalid");
+  }
+
+  const job = requireRecord(root.job, "proof.job");
+  const budget = requireRecord(root.budget, "proof.budget");
+  const settlement = requireRecord(root.settlement, "proof.settlement");
+  const accounting = requireRecord(root.accounting, "proof.accounting");
+  if (
+    settlement.grossSettledAmount !== budget.baseUnits ||
+    settlement.providerPayout !== budget.baseUnits ||
+    settlement.treasuryPayout !== "0" ||
+    settlement.evaluatorPayout !== "0" ||
+    job.canonicalSettledAmount !== "0" ||
+    accounting.residualAllowance !== "0"
+  ) {
+    throw new Error("proof settlement accounting is invalid");
+  }
+  const principal = BigInt(String(accounting.principal));
+  const escrowBeforeFund = BigInt(String(accounting.escrowBeforeFund));
+  const escrowAfterFund = BigInt(String(accounting.escrowAfterFund));
+  const providerBeforeComplete = BigInt(
+    String(accounting.providerBeforeComplete),
+  );
+  const providerAfterComplete = BigInt(
+    String(accounting.providerAfterComplete),
+  );
+  const escrowAfterComplete = BigInt(String(accounting.escrowAfterComplete));
+  if (
+    principal !== BigInt(String(budget.baseUnits)) ||
+    escrowAfterFund - escrowBeforeFund !== principal ||
+    providerAfterComplete - providerBeforeComplete !== principal ||
+    escrowAfterComplete !== escrowBeforeFund
+  ) {
+    throw new Error("proof escrow accounting is invalid");
+  }
+
+  if (root.recovery !== undefined) {
+    const recovery = requireRecord(root.recovery, "proof.recovery");
+    const historical = requireRecord(
+      recovery.historical,
+      "proof.recovery.historical",
+    );
+    const fresh = requireRecord(recovery.recovery, "proof.recovery.recovery");
+    requirePattern(historical.evidenceHash, HEX_32, "historical evidence hash");
+    requirePattern(
+      historical.attestationDigest,
+      HEX_32,
+      "historical attestation digest",
+    );
+    requirePattern(fresh.evidenceHash, HEX_32, "recovery evidence hash");
+    requirePattern(
+      fresh.attestationDigest,
+      HEX_32,
+      "recovery attestation digest",
+    );
+    if (
+      historical.operationState !== "EXPIRED" ||
+      historical.attestationActive !== false ||
+      historical.relayState !== "EXPIRED_UNSENT" ||
+      historical.relayCode !== "ATTESTATION_OR_JOB_EXPIRED" ||
+      historical.nonce !== null ||
+      historical.calldata !== null ||
+      historical.serializedTransaction !== null ||
+      historical.expectedTxHash !== null ||
+      historical.returnedTxHash !== null ||
+      historical.broadcastAttemptCount !== 0
+    ) {
+      throw new Error("historical attestation retirement is invalid");
+    }
+    if (
+      fresh.evidenceHash !== root.evidenceHash ||
+      fresh.evidenceHash !== settlement.completionReason ||
+      fresh.attestationDigest !== attestation.digest ||
+      fresh.verifiedAt !== attestation.verifiedAt ||
+      fresh.validUntil !== attestation.validUntil
+    ) {
+      throw new Error("recovery evidence equality is invalid");
+    }
+    if (
+      typeof recovery.relayNonceBefore !== "number" ||
+      typeof recovery.relayNonceAfter !== "number" ||
+      !Number.isSafeInteger(recovery.relayNonceBefore) ||
+      !Number.isSafeInteger(recovery.relayNonceAfter) ||
+      recovery.relayNonceAfter !== recovery.relayNonceBefore + 1 ||
+      relay.broadcastCount !== 1
+    ) {
+      throw new Error("recovery relay nonce or broadcast proof is invalid");
+    }
   }
 
   const source = requireRecord(root.sourceProvenance, "proof.sourceProvenance");

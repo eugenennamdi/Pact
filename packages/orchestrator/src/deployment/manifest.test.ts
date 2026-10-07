@@ -6,10 +6,12 @@ import {
   ARC_USDC_ADDRESS,
   ERC8183_NORMATIVE_REVISION,
   ERC8183_SOURCE_COMMIT,
+  HISTORICAL_MAINNET_TESTNET_CERTIFIED_RUNTIME_COMMIT,
   TESTNET_CERTIFIED_RUNTIME_COMMIT,
   assertDeploymentManifest,
   assertMainnetManifestProvenance,
   mainnetGateResultHash,
+  testnetGateResultHash,
 } from "./manifest.js";
 
 const hash = (byte: string): Hex => `0x${byte.repeat(64)}` as Hex;
@@ -17,6 +19,31 @@ const hash = (byte: string): Hex => `0x${byte.repeat(64)}` as Hex;
 function validManifest(): Record<string, unknown> {
   const proxy = "0x1111111111111111111111111111111111111111";
   const gitCommit = "a".repeat(40);
+  const testnetGate = {
+    status: "PASS" as const,
+    deploymentGitCommit: gitCommit,
+    e2eRuntimeCommit: TESTNET_CERTIFIED_RUNTIME_COMMIT,
+    erc8183SourceCommit: ERC8183_SOURCE_COMMIT,
+    evaluatorCodeHash: hash("9"),
+    completedAt: "2026-09-29T01:00:00.000Z",
+    jobId: "2",
+    github: {
+      repository: "pact-protocol/demo",
+      pullRequest: 2,
+      baseBranch: "main",
+      mergeCommitSha: `0x${"1".repeat(40)}` as Hex,
+    },
+    conditionHash: hash("a"),
+    evidenceHash: hash("b"),
+    attestationDigest: hash("c"),
+    settlementTransactionHash: hash("d"),
+    event: { blockNumber: "456", logIndex: 0 },
+    runtimeCodeHashes: {
+      erc8183Proxy: keccak256("0x6001"),
+      erc8183Implementation: keccak256("0x6002"),
+      pactEvaluator: keccak256("0x6003"),
+    },
+  };
   return {
     schemaVersion: 1,
     status: "DEPLOYED",
@@ -72,30 +99,8 @@ function validManifest(): Record<string, unknown> {
       pactEvaluator: "PENDING",
     },
     testnetGate: {
-      status: "PASS",
-      deploymentGitCommit: gitCommit,
-      e2eRuntimeCommit: TESTNET_CERTIFIED_RUNTIME_COMMIT,
-      erc8183SourceCommit: ERC8183_SOURCE_COMMIT,
-      evaluatorCodeHash: hash("9"),
-      completedAt: "2026-09-29T01:00:00.000Z",
-      resultHash: hash("8"),
-      jobId: "2",
-      github: {
-        repository: "pact-protocol/demo",
-        pullRequest: 2,
-        baseBranch: "main",
-        mergeCommitSha: `0x${"1".repeat(40)}`,
-      },
-      conditionHash: hash("a"),
-      evidenceHash: hash("b"),
-      attestationDigest: hash("c"),
-      settlementTransactionHash: hash("d"),
-      event: { blockNumber: "456", logIndex: 0 },
-      runtimeCodeHashes: {
-        erc8183Proxy: keccak256("0x6001"),
-        erc8183Implementation: keccak256("0x6002"),
-        pactEvaluator: keccak256("0x6003"),
-      },
+      ...testnetGate,
+      resultHash: testnetGateResultHash(testnetGate),
     },
   };
 }
@@ -122,7 +127,8 @@ function validMainnetManifest(): Record<string, unknown> {
     status: "PASS" as const,
     chainId: "5042" as const,
     mainnetReleaseCommit: manifest.gitCommit as string,
-    testnetCertifiedRuntimeCommit: TESTNET_CERTIFIED_RUNTIME_COMMIT,
+    testnetCertifiedRuntimeCommit:
+      HISTORICAL_MAINNET_TESTNET_CERTIFIED_RUNTIME_COMMIT,
     erc8183SourceCommit: ERC8183_SOURCE_COMMIT,
     completedAt: "2026-09-30T01:00:00.000Z",
     contracts: {
@@ -246,6 +252,14 @@ describe("deployment manifest", () => {
     );
   });
 
+  it("rejects a tampered Testnet certification result hash", () => {
+    const manifest = validManifest();
+    object(manifest, "testnetGate").conditionHash = hash("f");
+    expect(() => assertDeploymentManifest(manifest)).toThrow(
+      /testnetGate\.resultHash/,
+    );
+  });
+
   it("accepts deployed Mainnet without a gate and a complete Mainnet PASS", () => {
     const preE2E = validMainnetManifest();
     delete preE2E.mainnetGate;
@@ -283,9 +297,39 @@ describe("deployment manifest", () => {
     ).toThrow(/mainnetGate\.testnetCertifiedRuntimeCommit/);
   });
 
+  it("accepts the active Testnet runtime for a future Mainnet certification", () => {
+    const manifest = validMainnetManifest();
+    const gate = object(manifest, "mainnetGate");
+    gate.testnetCertifiedRuntimeCommit = TESTNET_CERTIFIED_RUNTIME_COMMIT;
+    delete gate.resultHash;
+    gate.resultHash = mainnetGateResultHash(gate as never);
+    expect(() =>
+      assertMainnetManifestProvenance(manifest, validManifest()),
+    ).not.toThrow();
+  });
+
+  it("keeps the historical Mainnet deployment reference immutable while accepting the active Testnet certification", () => {
+    const testnet = JSON.parse(
+      readFileSync("deployments/arc-testnet.json", "utf8"),
+    ) as unknown;
+    const mainnet = JSON.parse(
+      readFileSync("deployments/arc-mainnet.json", "utf8"),
+    ) as unknown;
+    const parsed = assertMainnetManifestProvenance(mainnet, testnet);
+    expect(
+      assertDeploymentManifest(testnet).testnetGate?.e2eRuntimeCommit,
+    ).toBe(TESTNET_CERTIFIED_RUNTIME_COMMIT);
+    expect(parsed.mainnetGate?.testnetCertifiedRuntimeCommit).toBe(
+      HISTORICAL_MAINNET_TESTNET_CERTIFIED_RUNTIME_COMMIT,
+    );
+  });
+
   it("rejects tampered canonical Testnet runtime provenance", () => {
     const testnet = validManifest();
-    object(testnet, "testnetGate").e2eRuntimeCommit = "d".repeat(40);
+    const gate = object(testnet, "testnetGate");
+    gate.e2eRuntimeCommit = "d".repeat(40);
+    delete gate.resultHash;
+    gate.resultHash = testnetGateResultHash(gate as never);
     expect(() =>
       assertMainnetManifestProvenance(validMainnetManifest(), testnet),
     ).toThrow(/testnetGate\.e2eRuntimeCommit/);
