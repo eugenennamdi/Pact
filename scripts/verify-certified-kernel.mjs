@@ -14,7 +14,7 @@ if (process.argv.length !== 2) {
 try {
   const result = await runKernelVerification();
   console.log(
-    `[certified-kernel] PASS: ${result.protectedFileCount} protected files, ${result.dependencyPackageCount} dependency resolutions`,
+    `[certified-kernel] PASS: ${result.currentProtectedFileCount} protected files (${result.historicalProtectedFileCount} baseline), ${result.dependencyPackageCount} dependency resolutions`,
   );
   console.log(JSON.stringify(result));
 } catch (error) {

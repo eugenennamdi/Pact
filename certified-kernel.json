@@ -52,6 +52,9 @@
     "packages/orchestrator/src/webhook.test.ts",
     "packages/orchestrator/src/relay/**",
     "packages/orchestrator/src/deployment/**",
+    "packages/orchestrator/src/recovery.ts",
+    "packages/orchestrator/src/recovery.test.ts",
+    "packages/orchestrator/src/recovery.local-e2e.test.ts",
     "packages/database/package.json",
     "packages/database/tsconfig.json",
     "packages/database/drizzle.config.ts",
@@ -302,5 +305,137 @@
         "classification": "DEPLOYED_APPLICATION_RUNTIME"
       }
     ]
-  }
+  },
+  "sourceMaintenance": [
+    {
+      "schemaVersion": 1,
+      "type": "ATTESTATION_RECOVERY_PATCH",
+      "review": "TASK_A_APPROVED",
+      "baselineCommit": "3d6e6b34c42166b5c3c72dc51abd664de5966af8",
+      "targetBaselineCommit": "92932adab77a246a4492bc08464d13d38263366e",
+      "classification": "SECURITY_SENSITIVE_RECOVERY_KERNEL",
+      "changes": [
+        {
+          "path": "packages/database/src/index.ts",
+          "fromHash": "sha256:062cda3bca8512e195c733506424c0fa68247e628103cc881bd63c82596e3cfe",
+          "toHash": "sha256:d4a77913a8b83e54547ef2a3fc44745b5709dc17f4d392214baf88f272487ba5",
+          "fromGitBlob": "795cdd56a54d86225b89c5d5f9f916c7b632ecbe",
+          "toGitBlob": "9d73f0ffb15c4eed67acf9afffca1b00cad49b15",
+          "reason": "Export recovery inspection and atomic retirement primitives from relay repository and types."
+        },
+        {
+          "path": "packages/database/src/live-test.ts",
+          "fromHash": "sha256:deca54d3c08455fd9a823a4c91a87fa017ca80151ca9d909696c1967dd975e48",
+          "toHash": "sha256:c2963ad4dcd4a23ce8baff4907377739e750a9df33f1421d3e5ad25ff75a755b",
+          "fromGitBlob": "35c25991a007f25500c34faf018cf420213a5401",
+          "toGitBlob": "9d35f998106d63cc1285f518c25ddf9327f9af55",
+          "reason": "Add live database invariant test groups 31-34 for recovery retirement, repeated recovery cycles, advisory lock, and state modeling."
+        },
+        {
+          "path": "packages/database/src/relay-repository.ts",
+          "fromHash": "sha256:e08a9d41a253cbb1204a9a7bc2eec82abbb8f00da235fede2eceaee2516d2087",
+          "toHash": "sha256:f14831721001298a50b88c0e9f197778e13c40be6dd2604d8ba5dd62d6cae369",
+          "fromGitBlob": "316aec94e1cd4178bd29f4fd1662b87769caefde",
+          "toGitBlob": "638d56e6e8d78a27ae0f96bdcc33cd0d82335823",
+          "reason": "Add digest-scoped inspectHistoricalRecoveryState and transactional retireExpiredUnsentAndEnqueueRecovery with advisory lock."
+        },
+        {
+          "path": "packages/database/src/repository.ts",
+          "fromHash": "sha256:8a757877f5853391bab50dcd65616c03182ee42625288b0cd921eb9cf89737ee",
+          "toHash": "sha256:db98ff3269f5b88c09916d2aceb8953bfb51fb37e52f9da617ba620972007630",
+          "fromGitBlob": "1a5b5ef2d8d598071aa22f8c6932dcb545710014",
+          "toGitBlob": "48a84af89d7ae720957d8f86ffe6461c4613dde2",
+          "reason": "Implement getAttestationArtifact for historical attestation inspection across active and expired operations."
+        },
+        {
+          "path": "packages/database/src/types.ts",
+          "fromHash": "sha256:9779ce99091f66c8d01be69e1907fae37e67305d9d0e21ce9dcfd2e30b139352",
+          "toHash": "sha256:05fb66b325c7da897e99f9dfac8470c7cbc7194eee023b00952b5c3ceccb2f1d",
+          "fromGitBlob": "f73c89bdce80f9b74cd15e324ada2176200afd1d",
+          "toGitBlob": "c4e0e347a2ffcdb3c2c5e07515b2d82751d00cd0",
+          "reason": "Define TypeScript types for recovery parameters, return values, and historical state shapes."
+        },
+        {
+          "path": "packages/orchestrator/package.json",
+          "fromHash": "sha256:d9c865aa117b3d2e0f45abfd80a9d6fd067ae0365b32364762f775bfda08eac3",
+          "toHash": "sha256:32be837ff014f924049818307292b48336ee7492c50a06ff58c07d474e38c993",
+          "fromGitBlob": "37aeec387428cf305acf01edb7daa6fa43c22f35",
+          "toGitBlob": "25e72cbaf4d3b986b8f283a47dc1efcbd3a2428d",
+          "reason": "Register recover:expired-attestation CLI deployment script."
+        },
+        {
+          "path": "packages/orchestrator/src/deployment/mainnet-release.test.ts",
+          "fromHash": "sha256:c46a753e1eba37c629f1a1b5501bb2ce7f8fb6c2c17438df1a5de00c194e5b96",
+          "toHash": "sha256:b9873f0866ae08cef3d3fd60cea17b8b8aa363ff9e0af909af0a590a8a579fcc",
+          "fromGitBlob": "a4b966ad6218df322f3625d7b80bc779ad29dc61",
+          "toGitBlob": "a3ae423eb983cc1a22ef5a09216968c6d13650ce",
+          "reason": "Add real Git inspection test suite for Mainnet release gate and validator blob."
+        },
+        {
+          "path": "packages/orchestrator/src/deployment/mainnet-release.ts",
+          "fromHash": "sha256:0f2360663d9277148d39819872dcc3319a1bf40909714071d8dbd0c7408f9660",
+          "toHash": "sha256:4a3bd79589b09f62ff0591ff069f7262a333a5427e93d7a43fbf196a4a35c233",
+          "fromGitBlob": "038c46fd020fc73c423acfd35aab0431fb71411d",
+          "toGitBlob": "fe23ff21e6d72d7288d1d0efd70fc9a24fb9e59e",
+          "reason": "Correct APPROVED_MANIFEST_VALIDATOR_BLOB pin to match manifest.ts blob exactly."
+        },
+        {
+          "path": "packages/orchestrator/src/deployment/recover-expired-attestation.ts",
+          "fromHash": null,
+          "toHash": "sha256:088d2556b2bf72b87d4a3b8ccbf25cfb8d0c5d9caf1a3bce9ba98ceccc06faf3",
+          "fromGitBlob": null,
+          "toGitBlob": "a1693ef4b46f00fdae5c4acf898d34932eabba10",
+          "reason": "Add standalone CLI entrypoint for expired attestation recovery with mainnet authorization guard."
+        },
+        {
+          "path": "packages/orchestrator/src/deployment/recovery-state.test.ts",
+          "fromHash": null,
+          "toHash": "sha256:3ba8574a6df579110d04c9ffcf4766e5b7d36ac48845ce19045785740db09560",
+          "fromGitBlob": null,
+          "toGitBlob": "7ead0f2eb03322d75ca18610462929871a364769",
+          "reason": "Add unit tests for recovery operator stage transitions, condition observation, and file locking."
+        },
+        {
+          "path": "packages/orchestrator/src/deployment/recovery-state.ts",
+          "fromHash": null,
+          "toHash": "sha256:a3cf81d2e32717ee600373ee77b5dc6fb5dcd0392853cba0fce2922e399fcff2",
+          "fromGitBlob": null,
+          "toGitBlob": "371d70e3a383215d158b256564961cfef37dbd77",
+          "reason": "Implement recovery operator state manager with tri-state condition observation and block timestamp control."
+        },
+        {
+          "path": "packages/orchestrator/src/index.ts",
+          "fromHash": "sha256:3e649d968fba1984522857b3dc10020156315dce5347629ac22c4762697b6580",
+          "toHash": "sha256:e4c673870298b169f466f473e623a6365c34327dca91a5512bdfbf1f0e8bca42",
+          "fromGitBlob": "7e4276b77046e64bff0e1c382a73f20761ec594c",
+          "toGitBlob": "85c9f7356d7000d569f3aec597723558fb60eef4",
+          "reason": "Re-export recovery service, preflight assertion, and mainnet approval gate functions and types."
+        },
+        {
+          "path": "packages/orchestrator/src/recovery.local-e2e.test.ts",
+          "fromHash": null,
+          "toHash": "sha256:cd96b0e59b5d2a4bb4626b9e1f6486e51e78f4dce633385eee7d2297daf6696d",
+          "fromGitBlob": null,
+          "toGitBlob": "a2e3504770e62004d48ed05580a722ab684f1201",
+          "reason": "Add local Anvil + PostgreSQL E2E test suite covering consecutive recovery cycles and settlement integrity."
+        },
+        {
+          "path": "packages/orchestrator/src/recovery.test.ts",
+          "fromHash": null,
+          "toHash": "sha256:4921d588b49da468c28a5e772216a6b90899c84d47063f12659e1118caf4dcb6",
+          "fromGitBlob": null,
+          "toGitBlob": "c9d8416972f2fc0f2cb73f377bb93396e907c77f",
+          "reason": "Add unit and invariant tests for attestation recovery service, preflight guards, and state validation."
+        },
+        {
+          "path": "packages/orchestrator/src/recovery.ts",
+          "fromHash": null,
+          "toHash": "sha256:b8b56093add141fec52f9a7f44cb02742b7ff72df3b2b80565fe0df330a6c018",
+          "fromGitBlob": null,
+          "toGitBlob": "7949a3831b8803e35fb2cf06bfd4ad5496fb0656",
+          "reason": "Implement core attestation recovery service with preflight invariant assertions and idempotency."
+        }
+      ]
+    }
+  ]
 }
