@@ -37,6 +37,7 @@ import {
 import { privateKeyToAccount, type PrivateKeyAccount } from "viem/accounts";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createArcReadClient, type ArcReadClient } from "./chain.js";
+import { resolveAnvilExecutable } from "./deployment/anvil-executable.js";
 import { createExpiredRecoveryCoordinator } from "./deployment/recovery-state.js";
 import type { ControlledOperatorState } from "./deployment/staged-operator.js";
 import {
@@ -46,7 +47,7 @@ import {
 } from "./recovery.js";
 import { createPhase4AOrchestrator } from "./service.js";
 
-const ANVIL_PATH = "/Users/apple/.foundry/bin/anvil";
+const ANVIL_PATH = resolveAnvilExecutable();
 const CHAIN_ID = 31_337;
 const PORT = 58593;
 const RPC_URL = `http://127.0.0.1:${PORT}`;

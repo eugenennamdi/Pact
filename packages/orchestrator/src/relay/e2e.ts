@@ -37,8 +37,9 @@ import { createRelayChainClient } from "./chain.js";
 import { pactRelayAbi } from "./abi.js";
 import { createPactRelayService } from "./service.js";
 import { createPactRelaySigner } from "./signer.js";
+import { resolveAnvilExecutable } from "../deployment/anvil-executable.js";
 
-const ANVIL_PATH = "/Users/apple/.foundry/bin/anvil";
+const ANVIL_PATH = resolveAnvilExecutable();
 const CHAIN_ID = 31_337;
 const RELAY_KEY =
   "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
