@@ -313,7 +313,7 @@
       "type": "ATTESTATION_RECOVERY_PATCH",
       "review": "TASK_A_APPROVED",
       "baselineCommit": "3d6e6b34c42166b5c3c72dc51abd664de5966af8",
-      "targetBaselineCommit": "4dec099af9b20570ba7911e1af01365faa258e1c",
+      "targetBaselineCommit": "c046fc45aa50c7e1d46aec9c42d4e7ef5e552f65",
       "classification": "SECURITY_SENSITIVE_RECOVERY_KERNEL",
       "changes": [
         {
@@ -371,6 +371,30 @@
           "fromGitBlob": "37aeec387428cf305acf01edb7daa6fa43c22f35",
           "toGitBlob": "25e72cbaf4d3b986b8f283a47dc1efcbd3a2428d",
           "reason": "Register recover:expired-attestation CLI deployment script."
+        },
+        {
+          "path": "packages/orchestrator/src/deployment/anvil-executable.test.ts",
+          "fromHash": null,
+          "toHash": "sha256:d0c88d85feed4f448eb34273adca8c99377cffa62a5cbb0cb298fca9b2fee28e",
+          "fromGitBlob": null,
+          "toGitBlob": "5e8f8e7a020e3b77cd726ba87b715942be6d6984",
+          "reason": "Test explicit Anvil overrides, PATH default resolution, and absence of the macOS-only executable path."
+        },
+        {
+          "path": "packages/orchestrator/src/deployment/anvil-executable.ts",
+          "fromHash": null,
+          "toHash": "sha256:d040e2d2313a5804ca1fc60b3f69d8e98e439c0387a7c12e629caea457f8473b",
+          "fromGitBlob": null,
+          "toGitBlob": "76667303a2a745f9a6643c7724d46566e2963ef6",
+          "reason": "Resolve Anvil portably from reviewed test-only overrides or PATH."
+        },
+        {
+          "path": "packages/orchestrator/src/deployment/local-e2e.ts",
+          "fromHash": "sha256:081603189696f7711ed93d9e4524f9201a103d30edab093fcafdf198ea75d360",
+          "toHash": "sha256:586309082008d0cbd99acaa878878232f870fcbb41f7b805743343bfde3ec0d0",
+          "fromGitBlob": "dd03ac0f317ec8d5452ad24eda67b285d29df3cc",
+          "toGitBlob": "98a1a937e8b4800c18d36f74e998e545d90f1f86",
+          "reason": "Use the shared PATH-resolved Anvil executable in the local deployment E2E harness."
         },
         {
           "path": "packages/orchestrator/src/deployment/mainnet-release.test.ts",
@@ -439,10 +463,10 @@
         {
           "path": "packages/orchestrator/src/recovery.local-e2e.test.ts",
           "fromHash": null,
-          "toHash": "sha256:cd96b0e59b5d2a4bb4626b9e1f6486e51e78f4dce633385eee7d2297daf6696d",
+          "toHash": "sha256:6b61da3a0e4501f57f783978e1e90efd7757ca5ba0c04b4b4687d065ef638e50",
           "fromGitBlob": null,
-          "toGitBlob": "a2e3504770e62004d48ed05580a722ab684f1201",
-          "reason": "Add local Anvil + PostgreSQL E2E test suite covering consecutive recovery cycles and settlement integrity."
+          "toGitBlob": "069a486d740d47a06b65788f77493b663995967e",
+          "reason": "Add the local Anvil + PostgreSQL recovery E2E suite and resolve Anvil portably from overrides or PATH."
         },
         {
           "path": "packages/orchestrator/src/recovery.test.ts",
@@ -459,6 +483,14 @@
           "fromGitBlob": null,
           "toGitBlob": "7949a3831b8803e35fb2cf06bfd4ad5496fb0656",
           "reason": "Implement core attestation recovery service with preflight invariant assertions and idempotency."
+        },
+        {
+          "path": "packages/orchestrator/src/relay/e2e.ts",
+          "fromHash": "sha256:06dbde4744443e8ee3967a6ffcb1ce931f8f9346864e8fb67af43b052af1bdf6",
+          "toHash": "sha256:b7c2d2673c60e71aaf81a3f5a74c55de808aa9addaf86c9991f799b1a2bc9a22",
+          "fromGitBlob": "4efc9bfacad44155bfa9316720b4e5cd3bc37bea",
+          "toGitBlob": "39cb9ec50ce445ecb03725fe8349d4cdc7f702ec",
+          "reason": "Use the shared PATH-resolved Anvil executable in the relay E2E harness."
         }
       ]
     }
