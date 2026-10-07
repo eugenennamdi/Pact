@@ -58,25 +58,25 @@
   "testnetGate": {
     "status": "PASS",
     "deploymentGitCommit": "5e9214f996ef48bc465ca2ee6a4f8e30d782a362",
-    "e2eRuntimeCommit": "fa20328df6643b0d85f6c2b6074d79dd0e5de54c",
+    "e2eRuntimeCommit": "92932adab77a246a4492bc08464d13d38263366e",
     "erc8183SourceCommit": "142e669c1fd318486a4628395b629f033654dd06",
     "evaluatorCodeHash": "0xd965f1c6b1574e32ca258e300558eb37bfef0ec253c0a02a4ebf7d05a546b487",
-    "completedAt": "2026-10-02T07:19:48.980Z",
-    "resultHash": "0x5283f3e048f94b1fdc40c428b5b0a5187512d39df3be579726e4f94d430d11e8",
-    "jobId": "3",
+    "completedAt": "2026-10-07T20:23:41.000Z",
+    "resultHash": "0xa0cd6be2647249e310a7d4d6efee56c20db2b6838518d06f2d7d2d572fbaf9cb",
+    "jobId": "9",
     "github": {
       "repository": "eugenennamdi/pact-arc-demo",
-      "pullRequest": 3,
+      "pullRequest": 8,
       "baseBranch": "main",
-      "mergeCommitSha": "0x44b45357b864f2448397777efa2af759a190c454"
+      "mergeCommitSha": "0xd2876547267804dbc24f8a36c5427b9f476abc08"
     },
-    "conditionHash": "0x652413b1b76d227bd9270b4dad75e54a183005b4881b9061abadacce1adb5300",
-    "evidenceHash": "0x77aa6c15f1681dd2ed764893973396e85cb3828fa8e58d337a0110d427738eef",
-    "attestationDigest": "0x73402c17d9dafba119e57a22d9f7c49b8d12481431845364386d2ecee12be9db",
-    "settlementTransactionHash": "0x6c7c876d7b68d6f79374d70fc6299c7f76829d49bbe233c3a8350b5773c38235",
+    "conditionHash": "0xb2eef42ed5cc0fee92f9df3528a24f73195d3007f8712ac27add0880b8fc88e1",
+    "evidenceHash": "0x8fbd0f0704de943e50c963dfcb42ccbe51cf4c263ad57d6cfce261aa11ad4cf0",
+    "attestationDigest": "0xc7b25b6533470b9501b3adb652fda00f6af1702c52fd848b5c2a5e0e0110b957",
+    "settlementTransactionHash": "0xa83befd46077e8c620eaa3569cb1f9445f9911a05b013973d6aebf8c73a47871",
     "event": {
-      "blockNumber": "64989743",
-      "logIndex": 22
+      "blockNumber": "66021764",
+      "logIndex": 19
     },
     "runtimeCodeHashes": {
       "erc8183Proxy": "0xd8213adf7f6483871a80a460216b7cd380d7c406ae464724918f93cf25acbe7e",

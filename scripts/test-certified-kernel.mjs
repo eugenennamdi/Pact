@@ -585,6 +585,22 @@ try {
     );
   }
 
+  {
+    const candidate = clone(manifest);
+    candidate.testnetCertifiedRuntimeCommit = "0".repeat(40);
+    expectFail("60 active Testnet certification drift fails parse", () =>
+      parseCertifiedKernelManifest(JSON.stringify(candidate)),
+    );
+  }
+
+  {
+    const candidate = clone(manifest);
+    candidate.historicalMainnetTestnetCertifiedRuntimeCommit = "0".repeat(40);
+    expectFail("61 historical Mainnet certification drift fails parse", () =>
+      parseCertifiedKernelManifest(JSON.stringify(candidate)),
+    );
+  }
+
   console.log(`[certified-kernel-test] PASS: ${results.length} cases`);
   console.log(JSON.stringify({ status: "PASS", cases: results }));
 } finally {

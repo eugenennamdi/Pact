@@ -8,7 +8,9 @@ import { keccak256 } from "viem";
 
 export const EXPECTED_PROVENANCE = Object.freeze({
   certifiedBaselineCommit: "3d6e6b34c42166b5c3c72dc51abd664de5966af8",
-  testnetCertifiedRuntimeCommit: "fa20328df6643b0d85f6c2b6074d79dd0e5de54c",
+  testnetCertifiedRuntimeCommit: "92932adab77a246a4492bc08464d13d38263366e",
+  historicalMainnetTestnetCertifiedRuntimeCommit:
+    "fa20328df6643b0d85f6c2b6074d79dd0e5de54c",
   mainnetExecutionReleaseCommit: "b5792c756b04fae543b1d3d92a337858ea9f529d",
   erc8183SourceCommit: "142e669c1fd318486a4628395b629f033654dd06",
 });
@@ -1120,6 +1122,7 @@ export function verifyContractArtifacts(repository, contractConfig) {
 export function verifyProvenance(repository, manifest) {
   const {
     testnetCertifiedRuntimeCommit,
+    historicalMainnetTestnetCertifiedRuntimeCommit,
     mainnetExecutionReleaseCommit,
     certifiedBaselineCommit,
   } = manifest;
@@ -1127,7 +1130,7 @@ export function verifyProvenance(repository, manifest) {
     !gitSucceeds(repository, [
       "merge-base",
       "--is-ancestor",
-      testnetCertifiedRuntimeCommit,
+      historicalMainnetTestnetCertifiedRuntimeCommit,
       mainnetExecutionReleaseCommit,
     ])
   )
@@ -1146,6 +1149,18 @@ export function verifyProvenance(repository, manifest) {
     fail(
       "PROVENANCE_ANCESTRY_FAILURE",
       "Mainnet release is not an ancestor of evidence baseline",
+    );
+  if (
+    !gitSucceeds(repository, [
+      "merge-base",
+      "--is-ancestor",
+      testnetCertifiedRuntimeCommit,
+      "HEAD",
+    ])
+  )
+    fail(
+      "PROVENANCE_ANCESTRY_FAILURE",
+      "Active Testnet-certified runtime is not an ancestor of the current release",
     );
   return true;
 }
@@ -1194,8 +1209,8 @@ async function verifyCertificationManifests(repository, manifest) {
   );
   exact(
     mainnet.mainnetGate?.testnetCertifiedRuntimeCommit,
-    manifest.testnetCertifiedRuntimeCommit,
-    "mainnet manifest testnet provenance",
+    manifest.historicalMainnetTestnetCertifiedRuntimeCommit,
+    "historical mainnet manifest testnet provenance",
   );
   exact(
     mainnet.erc8183.sourceCommit,

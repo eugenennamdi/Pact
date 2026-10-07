@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Hex } from "viem";
 import {
   assertDeploymentManifest,
+  testnetGateResultHash,
   type DeploymentManifest,
 } from "./manifest.js";
 import {
@@ -70,7 +71,22 @@ function mutableManifest(): Record<string, unknown> {
   return structuredClone(manifest) as unknown as Record<string, unknown>;
 }
 
+function recertifyTestnetGate(value: Record<string, unknown>): void {
+  const gate = value.testnetGate as Record<string, unknown>;
+  delete gate.resultHash;
+  gate.resultHash = testnetGateResultHash(gate as never);
+}
+
 describe("Mainnet release gate", () => {
+  it("allows only the exact reviewed release-control files", () => {
+    expect(APPROVED_CONTROL_PATHS).toEqual([
+      "packages/orchestrator/src/deployment/manifest.test.ts",
+      "packages/orchestrator/src/deployment/manifest.ts",
+      "packages/orchestrator/src/deployment/mainnet-release.ts",
+      "packages/orchestrator/src/deployment/mainnet-release.test.ts",
+    ]);
+  });
+
   it("blocks a missing Testnet PASS", () => {
     const value = mutableManifest();
     delete value.testnetGate;
@@ -133,6 +149,7 @@ describe("Mainnet release gate", () => {
     const value = mutableManifest();
     const gate = value.testnetGate as Record<string, unknown>;
     gate.conditionHash = `0x${"0".repeat(64)}`;
+    recertifyTestnetGate(value);
     const tampered = assertDeploymentManifest(value);
     expect(() => check(tampered)).toThrow(
       "MAINNET_BLOCKED_TESTNET_MANIFEST_INTEGRITY",
@@ -155,6 +172,7 @@ describe("Mainnet release gate", () => {
     const value = mutableManifest();
     (value.testnetGate as Record<string, unknown>).e2eRuntimeCommit =
       "d".repeat(40);
+    recertifyTestnetGate(value);
     expect(() =>
       check(
         assertDeploymentManifest(value),
@@ -203,6 +221,7 @@ describe("Real Git inspection suite", () => {
       >;
       const gate = manifestObj.testnetGate as Record<string, unknown>;
       gate.e2eRuntimeCommit = baseCommit;
+      recertifyTestnetGate(manifestObj);
       validTestnetManifest = assertDeploymentManifest(manifestObj);
 
       writeFileSync(
@@ -273,7 +292,7 @@ describe("Real Git inspection suite", () => {
           repository: tempDir,
         }),
       ).toThrow(
-        "MAINNET_BLOCKED_RUNTIME_DRIFT:packages/orchestrator/src/deployment/manifest.ts",
+        "MAINNET_BLOCKED_CONTROL_DRIFT:packages/orchestrator/src/deployment/manifest.ts",
       );
     });
 
@@ -299,6 +318,7 @@ describe("Real Git inspection suite", () => {
       >;
       const gate = manifestObj.testnetGate as Record<string, unknown>;
       gate.e2eRuntimeCommit = staleCommit;
+      recertifyTestnetGate(manifestObj);
       const staleManifest = assertDeploymentManifest(manifestObj);
 
       writeFileSync(
@@ -368,6 +388,7 @@ describe("Real Git inspection suite", () => {
       >;
       const gate = manifestObj.testnetGate as Record<string, unknown>;
       gate.e2eRuntimeCommit = orphanCommit;
+      recertifyTestnetGate(manifestObj);
       const nonDescendantManifest = assertDeploymentManifest(manifestObj);
 
       writeFileSync(

@@ -18,6 +18,8 @@ export const ERC8183_SOURCE_COMMIT =
 export const ERC8183_NORMATIVE_REVISION =
   "a078cab5cc8e9581c15f76c091ed96eed28f02f7" as const;
 export const TESTNET_CERTIFIED_RUNTIME_COMMIT =
+  "92932adab77a246a4492bc08464d13d38263366e" as const;
+export const HISTORICAL_MAINNET_TESTNET_CERTIFIED_RUNTIME_COMMIT =
   "fa20328df6643b0d85f6c2b6074d79dd0e5de54c" as const;
 
 export type PactNetwork = "arc-testnet" | "arc-mainnet";
@@ -195,6 +197,12 @@ function canonical(value: unknown): string {
 
 export function mainnetGateResultHash(
   gate: Omit<NonNullable<DeploymentManifest["mainnetGate"]>, "resultHash">,
+): Hex {
+  return keccak256(stringToHex(canonical(gate)));
+}
+
+export function testnetGateResultHash(
+  gate: Omit<NonNullable<DeploymentManifest["testnetGate"]>, "resultHash">,
 ): Hex {
   return keccak256(stringToHex(canonical(gate)));
 }
@@ -392,7 +400,7 @@ export function assertDeploymentManifest(input: unknown): DeploymentManifest {
       "testnetGate.erc8183SourceCommit",
     );
     hash(gate.evaluatorCodeHash, "testnetGate.evaluatorCodeHash");
-    hash(gate.resultHash, "testnetGate.resultHash");
+    const resultHash = hash(gate.resultHash, "testnetGate.resultHash");
     isoDate(gate.completedAt, "testnetGate.completedAt");
     const jobId = string(gate.jobId, "testnetGate.jobId");
     if (!/^[1-9]\d*$/.test(jobId))
@@ -468,6 +476,17 @@ export function assertDeploymentManifest(input: unknown): DeploymentManifest {
       ),
       hash(evaluator.codeHash, "pactEvaluator.codeHash"),
       "testnetGate.runtimeCodeHashes.pactEvaluator",
+    );
+    const { resultHash: _ignored, ...resultInput } = gate;
+    literal(
+      resultHash,
+      testnetGateResultHash(
+        resultInput as Omit<
+          NonNullable<DeploymentManifest["testnetGate"]>,
+          "resultHash"
+        >,
+      ),
+      "testnetGate.resultHash",
     );
   }
 
@@ -729,11 +748,15 @@ export function assertMainnetManifestProvenance(
     TESTNET_CERTIFIED_RUNTIME_COMMIT,
     "testnetGate.e2eRuntimeCommit",
   );
-  literal(
-    mainnet.mainnetGate.testnetCertifiedRuntimeCommit,
-    testnet.testnetGate.e2eRuntimeCommit,
-    "mainnetGate.testnetCertifiedRuntimeCommit",
-  );
+  if (
+    mainnet.mainnetGate.testnetCertifiedRuntimeCommit !==
+      HISTORICAL_MAINNET_TESTNET_CERTIFIED_RUNTIME_COMMIT &&
+    mainnet.mainnetGate.testnetCertifiedRuntimeCommit !==
+      testnet.testnetGate.e2eRuntimeCommit
+  )
+    throw new Error(
+      "invalid deployment manifest: mainnetGate.testnetCertifiedRuntimeCommit is neither the immutable historical certification nor the active Testnet certification",
+    );
   return mainnet;
 }
 

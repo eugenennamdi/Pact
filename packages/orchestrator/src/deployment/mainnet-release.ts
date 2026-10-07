@@ -21,7 +21,7 @@ const MANIFEST_VALIDATOR_PATH =
 // Filled from `git hash-object` after the validator/re-export isolation is
 // complete. Keeping this separate from manifest.ts avoids a self-reference.
 export const APPROVED_MANIFEST_VALIDATOR_BLOB =
-  "133c6426d010726ca7685005e624d5509ad4b661" as const;
+  "38d34744ba5c888dda7bfbcfa64fe9a9ddf0564f" as const;
 
 /**
  * Versioned, fail-closed roots for every production input that can affect the
@@ -39,6 +39,8 @@ export const MAINNET_CRITICAL_RUNTIME_ROOTS = Object.freeze([
 
 /** Exact control/evidence exceptions reviewed after the successful Testnet run. */
 export const APPROVED_CONTROL_PATHS = Object.freeze([
+  "packages/orchestrator/src/deployment/manifest.test.ts",
+  "packages/orchestrator/src/deployment/manifest.ts",
   "packages/orchestrator/src/deployment/mainnet-release.ts",
   "packages/orchestrator/src/deployment/mainnet-release.test.ts",
 ] as const);
