@@ -5,6 +5,7 @@ import {
   inArray,
   isNotNull,
   isNull,
+  ne,
   or,
   sql,
 } from "drizzle-orm";
@@ -15,6 +16,7 @@ import {
   normalizeGithubPrMergedCondition,
   normalizePactGitHubPrMergedEvidenceV1,
   normalizePactJobIdentity,
+  type Hex32,
 } from "@pact/protocol";
 import { getAddress, type Address, type Hex } from "viem";
 import type { PactDatabase } from "./client.js";
@@ -28,6 +30,9 @@ import {
 } from "./schema.js";
 import type {
   CanonicalRelayOutcome,
+  ExpiredUnsentRecoveryInput,
+  ExpiredUnsentRecoveryResult,
+  HistoricalRecoveryState,
   PactRecord,
   PersistedAttestation,
   PersistedRelayTransaction,
@@ -207,6 +212,491 @@ export class PostgresRelayRepository {
 
   constructor(database: PactDatabase) {
     this.#database = database;
+  }
+
+  async getAttestationArtifact(
+    operationId: string,
+    attestationDigest: PersistedAttestation["digest"],
+  ): Promise<ReadyToRelayArtifact | undefined> {
+    const [row] = await this.#database.db
+      .select({
+        operation: operations,
+        pact: pactRecords,
+        attestation: attestations,
+        evidence: evidenceRecords,
+      })
+      .from(operations)
+      .innerJoin(pactRecords, eq(operations.pactRecordId, pactRecords.id))
+      .innerJoin(attestations, eq(attestations.operationId, operations.id))
+      .innerJoin(
+        evidenceRecords,
+        eq(evidenceRecords.evidenceHash, attestations.evidenceHash),
+      )
+      .where(
+        and(
+          eq(operations.id, operationId),
+          eq(attestations.digest, attestationDigest),
+        ),
+      )
+      .limit(1);
+    if (row === undefined) return undefined;
+    const [reconciliation] = await this.#database.db
+      .select({ blockNumber: chainReconciliations.blockNumber })
+      .from(chainReconciliations)
+      .where(eq(chainReconciliations.operationId, operationId))
+      .orderBy(desc(chainReconciliations.attemptNumber))
+      .limit(1);
+    if (reconciliation === undefined)
+      throw new Error("RECOVERY_CHAIN_SNAPSHOT_MISSING");
+    return Object.freeze({
+      operationId,
+      pact: asPact(row.pact),
+      evidence: asEvidence(row.evidence),
+      attestation: asAttestation(row.attestation),
+      readyBlockNumber: BigInt(reconciliation.blockNumber),
+    });
+  }
+
+  async getActiveArtifactForOperation(
+    operationId: string,
+  ): Promise<ReadyToRelayArtifact | undefined> {
+    const [row] = await this.#database.db
+      .select({ digest: attestations.digest })
+      .from(attestations)
+      .where(
+        and(
+          eq(attestations.operationId, operationId),
+          eq(attestations.active, true),
+        ),
+      )
+      .limit(1);
+    return row === undefined
+      ? undefined
+      : this.getAttestationArtifact(
+          operationId,
+          row.digest as PersistedAttestation["digest"],
+        );
+  }
+
+  async inspectHistoricalRecoveryState(input: {
+    readonly pactRecordId: string;
+    readonly operationId: string;
+    readonly attestationDigest: Hex32;
+    readonly expectedChainId: bigint;
+    readonly expectedCommerceContract: Address;
+    readonly expectedPactEvaluator: Address;
+    readonly relayAddress: Address;
+  }): Promise<HistoricalRecoveryState> {
+    const [operation] = await this.#database.db
+      .select()
+      .from(operations)
+      .where(eq(operations.id, input.operationId))
+      .limit(1);
+    if (operation === undefined)
+      throw new Error("RECOVERY_HISTORICAL_OPERATION_NOT_FOUND");
+    if (operation.pactRecordId !== input.pactRecordId)
+      throw new Error("RECOVERY_OPERATION_PACT_MISMATCH");
+
+    const [attestation] = await this.#database.db
+      .select()
+      .from(attestations)
+      .where(eq(attestations.digest, input.attestationDigest))
+      .limit(1);
+    if (attestation === undefined)
+      throw new Error("RECOVERY_HISTORICAL_ATTESTATION_NOT_FOUND");
+    if (attestation.operationId !== input.operationId)
+      throw new Error("RECOVERY_ATTESTATION_OPERATION_MISMATCH");
+    if (attestation.pactRecordId !== input.pactRecordId)
+      throw new Error("RECOVERY_ATTESTATION_PACT_MISMATCH");
+
+    const artifact = await this.getAttestationArtifact(
+      input.operationId,
+      input.attestationDigest,
+    );
+    if (artifact === undefined) throw new Error("RECOVERY_ARTIFACT_NOT_FOUND");
+
+    const triggerKey = `expired-attestation:${input.attestationDigest}`;
+    const allRelayIntents = await this.#database.db
+      .select()
+      .from(relayIntents)
+      .where(eq(relayIntents.attestationDigest, input.attestationDigest));
+    const recoveryOpsForDigest = await this.#database.db
+      .select()
+      .from(operations)
+      .where(
+        and(
+          eq(operations.pactRecordId, input.pactRecordId),
+          eq(operations.triggerKind, "RECOVERY"),
+          eq(operations.triggerKey, triggerKey),
+        ),
+      );
+    const otherRecoveryOps = await this.#database.db
+      .select()
+      .from(operations)
+      .where(
+        and(
+          eq(operations.pactRecordId, input.pactRecordId),
+          eq(operations.triggerKind, "RECOVERY"),
+          ne(operations.triggerKey, triggerKey),
+        ),
+      );
+    for (const other of otherRecoveryOps) {
+      if (
+        other.id !== input.operationId &&
+        [
+          "PENDING",
+          "VERIFYING_GITHUB",
+          "VERIFIED",
+          "RECONCILING_CHAIN",
+          "READY_TO_SIGN",
+          "SIGNING",
+          "READY_TO_RELAY",
+        ].includes(other.state)
+      ) {
+        throw new Error(
+          "RECOVERY_INVALID_HISTORICAL_STATE: non-terminal recovery operation exists for other digest",
+        );
+      }
+    }
+
+    const isShapeA = operation.state === "READY_TO_RELAY" && attestation.active;
+
+    if (isShapeA) {
+      if (allRelayIntents.length > 0)
+        throw new Error("RECOVERY_RELAY_INTENT_EXISTS");
+      if (recoveryOpsForDigest.length > 0)
+        throw new Error("RECOVERY_OPERATION_ALREADY_EXISTS");
+      return {
+        shape: "SHAPE_A",
+        artifact,
+      };
+    }
+
+    const isShapeB =
+      operation.state === "EXPIRED" &&
+      operation.code === "ATTESTATION_OR_JOB_EXPIRED" &&
+      !attestation.active;
+
+    if (isShapeB) {
+      if (allRelayIntents.length !== 1)
+        throw new Error("RECOVERY_RELAY_AUDIT_ROW_MISSING");
+      const intent = asRelayIntent(allRelayIntents[0]!);
+      if (
+        intent.state !== "EXPIRED_UNSENT" ||
+        intent.code !== "ATTESTATION_OR_JOB_EXPIRED" ||
+        intent.retryable !== false ||
+        intent.pactRecordId !== input.pactRecordId ||
+        intent.chainId !== input.expectedChainId ||
+        getAddress(intent.relayAddress) !== getAddress(input.relayAddress) ||
+        getAddress(intent.pactEvaluator) !==
+          getAddress(input.expectedPactEvaluator) ||
+        getAddress(intent.commerceContract) !==
+          getAddress(input.expectedCommerceContract) ||
+        intent.nonce !== null ||
+        intent.calldata !== null ||
+        intent.serializedTransaction !== null ||
+        intent.expectedTxHash !== null ||
+        intent.returnedTxHash !== null ||
+        intent.transactionType !== null ||
+        intent.gasLimit !== null ||
+        intent.gasPrice !== null ||
+        intent.maxFeePerGas !== null ||
+        intent.maxPriorityFeePerGas !== null ||
+        intent.preDispatchBlockNumber !== null ||
+        intent.preDispatchBlockHash !== null ||
+        intent.receiptStatus !== null ||
+        intent.receiptBlockNumber !== null ||
+        intent.receiptBlockHash !== null ||
+        intent.receiptTransactionIndex !== null ||
+        intent.canonicalTxHash !== null ||
+        intent.eventBlockNumber !== null ||
+        intent.eventBlockHash !== null ||
+        intent.eventLogIndex !== null ||
+        intent.eventRelayer !== null ||
+        intent.eventVerifier !== null ||
+        intent.broadcastAttemptCount !== 0
+      ) {
+        throw new Error("RECOVERY_RELAY_AUDIT_INVALID");
+      }
+
+      if (recoveryOpsForDigest.length !== 1)
+        throw new Error("RECOVERY_OPERATION_COUNT_INVALID");
+      const recoveryOp = recoveryOpsForDigest[0]!;
+      if (recoveryOp.triggerKey !== triggerKey)
+        throw new Error("RECOVERY_OPERATION_TRIGGER_KEY_MISMATCH");
+
+      return {
+        shape: "SHAPE_B",
+        artifact,
+        recoveryOperationId: recoveryOp.id,
+        relayIntentId: intent.id,
+      };
+    }
+
+    if (operation.state === "READY_TO_RELAY" && !attestation.active)
+      throw new Error(
+        "RECOVERY_INVALID_HISTORICAL_STATE: READY_TO_RELAY operation has inactive attestation",
+      );
+    if (operation.state === "EXPIRED" && allRelayIntents.length === 0)
+      throw new Error(
+        "RECOVERY_INVALID_HISTORICAL_STATE: EXPIRED operation has no audit row",
+      );
+    if (
+      operation.state === "EXPIRED" &&
+      allRelayIntents.some((i) => i.nonce !== null)
+    )
+      throw new Error("RECOVERY_INVALID_HISTORICAL_STATE: old audit has nonce");
+    if (
+      operation.state === "EXPIRED" &&
+      allRelayIntents.some((i) => i.broadcastAttemptCount > 0)
+    )
+      throw new Error(
+        "RECOVERY_INVALID_HISTORICAL_STATE: old audit has broadcast attempt",
+      );
+    if (attestation.active && recoveryOpsForDigest.length > 0)
+      throw new Error(
+        "RECOVERY_INVALID_HISTORICAL_STATE: recovery operation exists while old artifact active",
+      );
+    if (recoveryOpsForDigest.length > 1)
+      throw new Error(
+        "RECOVERY_INVALID_HISTORICAL_STATE: multiple recovery operations exist",
+      );
+    if (
+      allRelayIntents.some((i) =>
+        ["SIGNED", "DISPATCHING", "SUBMITTED", "BROADCAST_UNKNOWN"].includes(
+          i.state,
+        ),
+      )
+    )
+      throw new Error(
+        "RECOVERY_INVALID_HISTORICAL_STATE: relay intent in active broadcast state",
+      );
+    if (
+      allRelayIntents.some(
+        (i) => getAddress(i.relayAddress) !== getAddress(input.relayAddress),
+      )
+    )
+      throw new Error(
+        "RECOVERY_INVALID_HISTORICAL_STATE: relay intent wrong relay identity",
+      );
+    if (allRelayIntents.some((i) => i.pactRecordId !== input.pactRecordId))
+      throw new Error(
+        "RECOVERY_INVALID_HISTORICAL_STATE: relay intent wrong pact identity",
+      );
+
+    throw new Error(
+      `RECOVERY_INVALID_HISTORICAL_STATE:${operation.state}:${attestation.active ? "active" : "inactive"}`,
+    );
+  }
+
+  async retireExpiredUnsentAndEnqueueRecovery(
+    input: ExpiredUnsentRecoveryInput,
+  ): Promise<ExpiredUnsentRecoveryResult> {
+    if (
+      !input.recoveryTriggerKey.startsWith("expired-attestation:") ||
+      input.recoveryTriggerKey !==
+        `expired-attestation:${input.attestationDigest}` ||
+      input.recoveryTriggerKey.length > 128
+    )
+      throw new Error("RECOVERY_TRIGGER_KEY_INVALID");
+
+    return this.#database.db.transaction(async (tx) => {
+      await tx.execute(
+        sql`select pg_advisory_xact_lock(hashtextextended(${`expired-attestation:${input.pactRecordId}`}, 0))`,
+      );
+      const [row] = await tx
+        .select({
+          operation: operations,
+          pact: pactRecords,
+          attestation: attestations,
+        })
+        .from(operations)
+        .innerJoin(pactRecords, eq(operations.pactRecordId, pactRecords.id))
+        .innerJoin(attestations, eq(attestations.operationId, operations.id))
+        .where(
+          and(
+            eq(operations.id, input.operationId),
+            eq(operations.pactRecordId, input.pactRecordId),
+            eq(attestations.digest, input.attestationDigest),
+          ),
+        )
+        .limit(1)
+        .for("update");
+      if (row === undefined) throw new Error("RECOVERY_ARTIFACT_NOT_FOUND");
+
+      const pact = asPact(row.pact);
+      const attestation = asAttestation(row.attestation);
+      const snapshot = input.snapshot;
+      const identityMatches =
+        pact.id === input.pactRecordId &&
+        pact.chainId === snapshot.chainId &&
+        pact.commerceContract === getAddress(snapshot.commerceContract) &&
+        pact.pactEvaluator === getAddress(snapshot.pactEvaluator) &&
+        pact.jobId === snapshot.jobId &&
+        pact.jobKey === snapshot.jobKey &&
+        pact.conditionHash === snapshot.bindingConditionHash &&
+        pact.completionDeadline === snapshot.bindingCompletionDeadline &&
+        attestation.digest === input.attestationDigest &&
+        attestation.chainId === pact.chainId &&
+        attestation.verifyingContract === pact.pactEvaluator &&
+        attestation.commerceContract === pact.commerceContract &&
+        attestation.jobId === pact.jobId &&
+        attestation.jobKey === pact.jobKey &&
+        attestation.conditionHash === pact.conditionHash &&
+        attestation.signer === getAddress(snapshot.bindingVerifier) &&
+        getAddress(snapshot.jobEvaluator) === pact.pactEvaluator &&
+        getAddress(snapshot.jobClient) === getAddress(input.expectedClient) &&
+        getAddress(snapshot.jobProvider) === getAddress(input.expectedProvider);
+      if (!identityMatches) throw new Error("RECOVERY_IDENTITY_MISMATCH");
+      if (!snapshot.bindingExists) throw new Error("RECOVERY_BINDING_MISSING");
+      if (snapshot.bindingAccepted)
+        throw new Error("RECOVERY_BINDING_ALREADY_ACCEPTED");
+      if (snapshot.verifierRevoked)
+        throw new Error("RECOVERY_VERIFIER_REVOKED");
+      if (snapshot.jobStatus !== 2)
+        throw new Error("RECOVERY_JOB_NOT_SUBMITTED");
+      if (snapshot.blockTimestamp >= snapshot.jobExpiredAt)
+        throw new Error("RECOVERY_JOB_EXPIRED");
+      if (attestation.validUntil >= snapshot.blockTimestamp)
+        throw new Error("RECOVERY_ATTESTATION_NOT_EXPIRED");
+
+      const [intent] = await tx
+        .select()
+        .from(relayIntents)
+        .where(eq(relayIntents.attestationDigest, input.attestationDigest))
+        .limit(1)
+        .for("update");
+      const [recovery] = await tx
+        .select()
+        .from(operations)
+        .where(
+          and(
+            eq(operations.pactRecordId, input.pactRecordId),
+            eq(operations.triggerKind, "RECOVERY"),
+            eq(operations.triggerKey, input.recoveryTriggerKey),
+          ),
+        )
+        .limit(1)
+        .for("update");
+
+      if (
+        row.operation.state === "EXPIRED" &&
+        !row.attestation.active &&
+        intent?.state === "EXPIRED_UNSENT" &&
+        intent.code === "ATTESTATION_OR_JOB_EXPIRED" &&
+        !intent.retryable &&
+        intent.pactRecordId === pact.id &&
+        intent.chainId === pact.chainId.toString() &&
+        intent.relayAddress === getAddress(input.relayAddress) &&
+        intent.pactEvaluator === pact.pactEvaluator &&
+        intent.commerceContract === pact.commerceContract &&
+        intent.nonce === null &&
+        intent.calldata === null &&
+        intent.serializedTransaction === null &&
+        intent.expectedTxHash === null &&
+        intent.transactionType === null &&
+        intent.gasLimit === null &&
+        intent.gasPrice === null &&
+        intent.maxFeePerGas === null &&
+        intent.maxPriorityFeePerGas === null &&
+        intent.preDispatchBlockNumber === null &&
+        intent.preDispatchBlockHash === null &&
+        intent.returnedTxHash === null &&
+        intent.broadcastAttemptCount === 0 &&
+        intent.receiptStatus === null &&
+        intent.receiptBlockNumber === null &&
+        intent.receiptBlockHash === null &&
+        intent.receiptTransactionIndex === null &&
+        intent.canonicalTxHash === null &&
+        intent.eventBlockNumber === null &&
+        intent.eventBlockHash === null &&
+        intent.eventLogIndex === null &&
+        intent.eventRelayer === null &&
+        intent.eventVerifier === null &&
+        recovery !== undefined
+      )
+        return {
+          recoveryOperationId: recovery.id,
+          relayIntentId: intent.id,
+          reused: true,
+        };
+
+      if (row.operation.state !== "READY_TO_RELAY")
+        throw new Error("RECOVERY_OPERATION_NOT_READY_TO_RELAY");
+      if (!row.attestation.active)
+        throw new Error("RECOVERY_ATTESTATION_NOT_ACTIVE");
+      if (intent !== undefined) throw new Error("RECOVERY_RELAY_INTENT_EXISTS");
+      if (recovery !== undefined)
+        throw new Error("RECOVERY_OPERATION_ALREADY_EXISTS");
+
+      const [terminal] = await tx
+        .insert(relayIntents)
+        .values({
+          id: crypto.randomUUID(),
+          pactRecordId: pact.id,
+          attestationDigest: attestation.digest,
+          state: "EXPIRED_UNSENT",
+          code: "ATTESTATION_OR_JOB_EXPIRED",
+          retryable: false,
+          chainId: pact.chainId.toString(),
+          relayAddress: getAddress(input.relayAddress),
+          pactEvaluator: pact.pactEvaluator,
+          commerceContract: pact.commerceContract,
+        })
+        .returning({ id: relayIntents.id });
+      if (terminal === undefined)
+        throw new Error("RECOVERY_TERMINAL_INTENT_INSERT_FAILED");
+
+      const retiredOperations = await tx
+        .update(operations)
+        .set({
+          state: "EXPIRED",
+          code: "ATTESTATION_OR_JOB_EXPIRED",
+          retryable: false,
+          version: sql`${operations.version} + 1`,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(operations.id, input.operationId),
+            eq(operations.state, "READY_TO_RELAY"),
+          ),
+        )
+        .returning({ id: operations.id });
+      if (retiredOperations.length !== 1)
+        throw new Error("RECOVERY_OPERATION_RETIRE_CAS_FAILED");
+
+      const retiredAttestations = await tx
+        .update(attestations)
+        .set({ active: false })
+        .where(
+          and(
+            eq(attestations.digest, input.attestationDigest),
+            eq(attestations.active, true),
+          ),
+        )
+        .returning({ digest: attestations.digest });
+      if (retiredAttestations.length !== 1)
+        throw new Error("RECOVERY_ATTESTATION_RETIRE_CAS_FAILED");
+
+      const [created] = await tx
+        .insert(operations)
+        .values({
+          id: crypto.randomUUID(),
+          pactRecordId: pact.id,
+          triggerKind: "RECOVERY",
+          triggerKey: input.recoveryTriggerKey,
+          state: "PENDING",
+        })
+        .returning({ id: operations.id });
+      if (created === undefined)
+        throw new Error("RECOVERY_OPERATION_INSERT_FAILED");
+      return {
+        recoveryOperationId: created.id,
+        relayIntentId: terminal.id,
+        reused: false,
+      };
+    });
   }
 
   async listReadyToRelayArtifacts(

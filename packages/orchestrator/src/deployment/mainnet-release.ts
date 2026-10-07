@@ -21,7 +21,7 @@ const MANIFEST_VALIDATOR_PATH =
 // Filled from `git hash-object` after the validator/re-export isolation is
 // complete. Keeping this separate from manifest.ts avoids a self-reference.
 export const APPROVED_MANIFEST_VALIDATOR_BLOB =
-  "86f660e47112654755e943a9d2ded91892e87a5b" as const;
+  "133c6426d010726ca7685005e624d5509ad4b661" as const;
 
 /**
  * Versioned, fail-closed roots for every production input that can affect the

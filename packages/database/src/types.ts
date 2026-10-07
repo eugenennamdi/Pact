@@ -176,6 +176,37 @@ export interface RelayIntentRecord {
   readonly version: number;
 }
 
+export interface ExpiredUnsentRecoveryInput {
+  readonly pactRecordId: string;
+  readonly operationId: string;
+  readonly attestationDigest: Hex32;
+  readonly recoveryTriggerKey: string;
+  readonly relayAddress: Address;
+  readonly expectedClient: Address;
+  readonly expectedProvider: Address;
+  readonly snapshot: PersistedChainSnapshot;
+}
+
+export interface ExpiredUnsentRecoveryResult {
+  readonly recoveryOperationId: string;
+  readonly relayIntentId: string;
+  readonly reused: boolean;
+}
+
+export type HistoricalRecoveryShape = "SHAPE_A" | "SHAPE_B";
+
+export type HistoricalRecoveryState =
+  | {
+      readonly shape: "SHAPE_A";
+      readonly artifact: ReadyToRelayArtifact;
+    }
+  | {
+      readonly shape: "SHAPE_B";
+      readonly artifact: ReadyToRelayArtifact;
+      readonly recoveryOperationId: string;
+      readonly relayIntentId: string;
+    };
+
 export interface PersistedRelayTransaction {
   readonly calldata: Hex;
   readonly serializedTransaction: Hex;

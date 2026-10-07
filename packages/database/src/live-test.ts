@@ -29,9 +29,12 @@ import {
 } from "./schema.js";
 import * as schema from "./schema.js";
 import type {
+  ExpiredUnsentRecoveryInput,
   OperationState,
   PactRecord,
   PersistedAttestation,
+  PersistedChainSnapshot,
+  ReadyToRelayArtifact,
 } from "./types.js";
 
 const CAS_ITERATIONS = 100;
@@ -391,6 +394,44 @@ async function createReadyRelayArtifact(
     attestation,
     readyBlockNumber: 100n,
   } as const;
+}
+
+function expiredRecoveryInput(
+  ready: ReadyToRelayArtifact,
+  overrides: Partial<PersistedChainSnapshot> = {},
+): ExpiredUnsentRecoveryInput {
+  const snapshot: PersistedChainSnapshot = {
+    blockNumber: 200n,
+    blockHash: hex32(`recovery-block:${ready.operationId}`),
+    blockTimestamp: ready.attestation.validUntil + 1n,
+    chainId: ready.pact.chainId,
+    pactEvaluator: ready.pact.pactEvaluator,
+    commerceContract: ready.pact.commerceContract,
+    jobId: ready.pact.jobId,
+    jobKey: ready.pact.jobKey,
+    bindingExists: true,
+    bindingConditionHash: ready.pact.conditionHash,
+    bindingCompletionDeadline: ready.pact.completionDeadline,
+    bindingVerifier: ready.attestation.signer,
+    bindingAccepted: false,
+    verifierRevoked: false,
+    jobClient: "0x4444444444444444444444444444444444444444",
+    jobProvider: "0x5555555555555555555555555555555555555555",
+    jobEvaluator: ready.pact.pactEvaluator,
+    jobStatus: 2,
+    jobExpiredAt: 1_900_001_000n,
+    ...overrides,
+  };
+  return {
+    pactRecordId: ready.pact.id,
+    operationId: ready.operationId,
+    attestationDigest: ready.attestation.digest,
+    recoveryTriggerKey: `expired-attestation:${ready.attestation.digest}`,
+    relayAddress: relayAddress(700_001),
+    expectedClient: snapshot.jobClient,
+    expectedProvider: snapshot.jobProvider,
+    snapshot,
+  };
 }
 
 function relayAddress(ordinal: number): `0x${string}` {
@@ -1273,6 +1314,825 @@ async function run(): Promise<void> {
     0,
   );
   pass("crash-before-artifact recovers and re-enters GitHub verification");
+
+  const expiredReady = await createReadyRelayArtifact(
+    repository,
+    workingDatabase,
+    "expired-unsent-recovery",
+  );
+  const expiredInput = expiredRecoveryInput(expiredReady);
+  const recoveryRace = await Promise.all([
+    relayRepositoryA.retireExpiredUnsentAndEnqueueRecovery(expiredInput),
+    relayRepositoryB.retireExpiredUnsentAndEnqueueRecovery(expiredInput),
+  ]);
+  assert.equal(
+    new Set(recoveryRace.map(({ recoveryOperationId }) => recoveryOperationId))
+      .size,
+    1,
+  );
+  assert.equal(
+    new Set(recoveryRace.map(({ relayIntentId }) => relayIntentId)).size,
+    1,
+  );
+  assert.equal(recoveryRace.filter(({ reused }) => !reused).length, 1);
+  assert.equal(recoveryRace.filter(({ reused }) => reused).length, 1);
+  const recoveryOperationId = recoveryRace[0]!.recoveryOperationId;
+  const [oldOperationRow] = await workingDatabase.sql<
+    { state: string; code: string }[]
+  >`select state, code from operations where id = ${expiredReady.operationId}::uuid`;
+  assert.deepEqual(oldOperationRow, {
+    state: "EXPIRED",
+    code: "ATTESTATION_OR_JOB_EXPIRED",
+  });
+  const [oldAttestationRow] = await workingDatabase.sql<
+    { active: boolean; evidence_hash: string }[]
+  >`select active, evidence_hash from attestations where digest = ${expiredReady.attestation.digest}`;
+  assert.equal(oldAttestationRow?.active, false);
+  assert.equal(
+    oldAttestationRow?.evidence_hash,
+    expiredReady.attestation.evidenceHash,
+  );
+  const [oldEvidenceRows] = await workingDatabase.sql<
+    { value: number }[]
+  >`select count(*)::int as value from evidence_records where evidence_hash = ${expiredReady.attestation.evidenceHash}`;
+  assert.equal(oldEvidenceRows?.value, 1);
+  const [audit] = await workingDatabase.sql<
+    {
+      state: string;
+      code: string;
+      nonce: string | null;
+      calldata: string | null;
+      serialized_transaction: string | null;
+      expected_tx_hash: string | null;
+      transaction_type: string | null;
+      gas_limit: string | null;
+      gas_price: string | null;
+      max_fee_per_gas: string | null;
+      max_priority_fee_per_gas: string | null;
+      pre_dispatch_block_number: string | null;
+      pre_dispatch_block_hash: string | null;
+      returned_tx_hash: string | null;
+      broadcast_attempt_count: number;
+      receipt_status: string | null;
+      receipt_block_number: string | null;
+      receipt_block_hash: string | null;
+      receipt_transaction_index: number | null;
+      canonical_tx_hash: string | null;
+      event_block_number: string | null;
+      event_block_hash: string | null;
+      event_log_index: number | null;
+      event_relayer: string | null;
+      event_verifier: string | null;
+    }[]
+  >`select state, code, nonce, calldata, serialized_transaction, expected_tx_hash,
+      transaction_type, gas_limit, gas_price, max_fee_per_gas,
+      max_priority_fee_per_gas, pre_dispatch_block_number,
+      pre_dispatch_block_hash, returned_tx_hash, broadcast_attempt_count,
+      receipt_status, receipt_block_number, receipt_block_hash,
+      receipt_transaction_index, canonical_tx_hash, event_block_number,
+      event_block_hash, event_log_index, event_relayer, event_verifier
+    from relay_intents where attestation_digest = ${expiredReady.attestation.digest}`;
+  assert.deepEqual(audit, {
+    state: "EXPIRED_UNSENT",
+    code: "ATTESTATION_OR_JOB_EXPIRED",
+    nonce: null,
+    calldata: null,
+    serialized_transaction: null,
+    expected_tx_hash: null,
+    transaction_type: null,
+    gas_limit: null,
+    gas_price: null,
+    max_fee_per_gas: null,
+    max_priority_fee_per_gas: null,
+    pre_dispatch_block_number: null,
+    pre_dispatch_block_hash: null,
+    returned_tx_hash: null,
+    broadcast_attempt_count: 0,
+    receipt_status: null,
+    receipt_block_number: null,
+    receipt_block_hash: null,
+    receipt_transaction_index: null,
+    canonical_tx_hash: null,
+    event_block_number: null,
+    event_block_hash: null,
+    event_log_index: null,
+    event_relayer: null,
+    event_verifier: null,
+  });
+  const recoveryOperation = await repository.getOperation(recoveryOperationId);
+  assert.equal(recoveryOperation?.operation.triggerKind, "RECOVERY");
+  assert.equal(recoveryOperation?.operation.state, "PENDING");
+  const repeatedRecovery =
+    await relayRepositoryA.retireExpiredUnsentAndEnqueueRecovery(expiredInput);
+  assert.equal(repeatedRecovery.recoveryOperationId, recoveryOperationId);
+  assert.equal(repeatedRecovery.reused, true);
+  pass(
+    "expired-unsent retirement is atomic, historical, idempotent, and concurrency-safe",
+  );
+
+  const freshEvidence = evidenceFixture(
+    expiredReady.pact,
+    "expired-unsent-fresh",
+  );
+  const freshAttestation = attestationFixture({
+    pact: expiredReady.pact,
+    ...freshEvidence,
+    label: "expired-unsent-fresh",
+  });
+  await repository.transitionOperation(
+    recoveryOperationId,
+    ["PENDING"],
+    "VERIFYING_GITHUB",
+  );
+  assert.equal(
+    (
+      await repository.recoverInterruptedRecoveryOperation(
+        recoveryOperationId,
+        expiredInput.recoveryTriggerKey,
+      )
+    ).state,
+    "PENDING",
+  );
+  await repository.transitionOperation(
+    recoveryOperationId,
+    ["PENDING"],
+    "CHAIN_RETRYABLE",
+    { code: "RPC_TIMEOUT", retryable: true },
+  );
+  assert.equal(
+    (
+      await repository.recoverInterruptedRecoveryOperation(
+        recoveryOperationId,
+        expiredInput.recoveryTriggerKey,
+      )
+    ).state,
+    "PENDING",
+  );
+  await repository.transitionOperation(
+    recoveryOperationId,
+    ["PENDING"],
+    "SIGNING",
+  );
+  await workingDatabase.db.insert(chainReconciliations).values({
+    id: crypto.randomUUID(),
+    operationId: recoveryOperationId,
+    attemptNumber: 1,
+    outcome: "READY",
+    blockNumber: "202",
+    blockHash: hex32("expired-unsent-fresh-block"),
+    blockTimestamp: freshEvidence.evidence.observedAt.toString(),
+    chainId: expiredReady.pact.chainId.toString(),
+    pactEvaluator: expiredReady.pact.pactEvaluator,
+    commerceContract: expiredReady.pact.commerceContract,
+    jobId: expiredReady.pact.jobId.toString(),
+    jobKey: expiredReady.pact.jobKey,
+    bindingExists: true,
+    bindingConditionHash: expiredReady.pact.conditionHash,
+    bindingCompletionDeadline: expiredReady.pact.completionDeadline.toString(),
+    bindingVerifier: freshAttestation.signer,
+    bindingAccepted: false,
+    verifierRevoked: false,
+    jobClient: expiredInput.expectedClient,
+    jobProvider: expiredInput.expectedProvider,
+    jobEvaluator: expiredReady.pact.pactEvaluator,
+    jobStatus: 2,
+    jobExpiredAt: expiredInput.snapshot.jobExpiredAt.toString(),
+  });
+  await repository.persistReadyToRelay(
+    recoveryOperationId,
+    expiredReady.pact.id,
+    freshEvidence.evidence,
+    freshEvidence.evidenceHash,
+    freshAttestation,
+  );
+  const [activeAttestations] = await workingDatabase.sql<
+    { value: number }[]
+  >`select count(*)::int as value from attestations where pact_record_id = ${expiredReady.pact.id}::uuid and active = true`;
+  assert.equal(activeAttestations?.value, 1);
+  assert.equal(
+    (await relayRepositoryA.getActiveArtifactForOperation(recoveryOperationId))
+      ?.attestation.digest,
+    freshAttestation.digest,
+  );
+  assert.equal(
+    (
+      await repository.recoverInterruptedRecoveryOperation(
+        recoveryOperationId,
+        expiredInput.recoveryTriggerKey,
+      )
+    ).state,
+    "READY_TO_RELAY",
+  );
+  pass("fresh recovery attestation becomes the sole active artifact");
+
+  const rollbackReady = await createReadyRelayArtifact(
+    repository,
+    workingDatabase,
+    "expired-recovery-rollback",
+  );
+  await workingDatabase.sql.unsafe(`
+    create function pact_test_fail_recovery_insert() returns trigger language plpgsql as $$
+    begin
+      if new.trigger_kind = 'RECOVERY' then raise exception 'injected recovery failure'; end if;
+      return new;
+    end $$;
+    create trigger pact_test_fail_recovery_insert before insert on operations
+    for each row execute function pact_test_fail_recovery_insert();
+  `);
+  await expectRejected(
+    relayRepositoryA.retireExpiredUnsentAndEnqueueRecovery(
+      expiredRecoveryInput(rollbackReady),
+    ),
+  );
+  await workingDatabase.sql.unsafe(`
+    drop trigger pact_test_fail_recovery_insert on operations;
+    drop function pact_test_fail_recovery_insert();
+  `);
+  assert.equal(
+    (await repository.getOperation(rollbackReady.operationId))?.operation.state,
+    "READY_TO_RELAY",
+  );
+  const [rollbackAttestation] = await workingDatabase.sql<
+    { active: boolean }[]
+  >`select active from attestations where digest = ${rollbackReady.attestation.digest}`;
+  assert.equal(rollbackAttestation?.active, true);
+  const [rollbackIntent] = await workingDatabase.sql<
+    { value: number }[]
+  >`select count(*)::int as value from relay_intents where attestation_digest = ${rollbackReady.attestation.digest}`;
+  assert.equal(rollbackIntent?.value, 0);
+  pass(
+    "recovery transaction failure restores operation and active attestation",
+  );
+
+  for (const [label, overrides, code] of [
+    [
+      "unexpired",
+      { blockTimestamp: 1_800_000_000n },
+      "RECOVERY_ATTESTATION_NOT_EXPIRED",
+    ],
+    ["job-expired", { jobExpiredAt: 1_800_000_000n }, "RECOVERY_JOB_EXPIRED"],
+    ["not-submitted", { jobStatus: 1 }, "RECOVERY_JOB_NOT_SUBMITTED"],
+    [
+      "accepted",
+      { bindingAccepted: true },
+      "RECOVERY_BINDING_ALREADY_ACCEPTED",
+    ],
+    ["revoked", { verifierRevoked: true }, "RECOVERY_VERIFIER_REVOKED"],
+    ["wrong-chain", { chainId: 5_042_002n }, "RECOVERY_IDENTITY_MISMATCH"],
+    ["wrong-job", { jobId: 999n }, "RECOVERY_IDENTITY_MISMATCH"],
+    [
+      "wrong-key",
+      { jobKey: hex32("wrong-job-key") },
+      "RECOVERY_IDENTITY_MISMATCH",
+    ],
+    [
+      "wrong-condition",
+      { bindingConditionHash: hex32("wrong-condition") },
+      "RECOVERY_IDENTITY_MISMATCH",
+    ],
+    [
+      "wrong-deadline",
+      { bindingCompletionDeadline: 1n },
+      "RECOVERY_IDENTITY_MISMATCH",
+    ],
+    [
+      "wrong-signer",
+      { bindingVerifier: relayAddress(999_999) },
+      "RECOVERY_IDENTITY_MISMATCH",
+    ],
+  ] as const) {
+    const rejectedReady = await createReadyRelayArtifact(
+      repository,
+      workingDatabase,
+      `expired-recovery-reject-${label}`,
+    );
+    const error = await expectRejected(
+      relayRepositoryA.retireExpiredUnsentAndEnqueueRecovery(
+        expiredRecoveryInput(
+          rejectedReady,
+          overrides as Partial<PersistedChainSnapshot>,
+        ),
+      ),
+    );
+    assert.match(String(error), new RegExp(code));
+  }
+  pass("recovery rejects unexpired, terminal, and drifted canonical state");
+
+  const wrongDigestReady = await createReadyRelayArtifact(
+    repository,
+    workingDatabase,
+    "expired-recovery-wrong-digest",
+  );
+  const wrongDigestInput = {
+    ...expiredRecoveryInput(wrongDigestReady),
+    attestationDigest: hex32("not-the-old-digest"),
+    recoveryTriggerKey: `expired-attestation:${hex32("not-the-old-digest")}`,
+  };
+  assert.match(
+    String(
+      await expectRejected(
+        relayRepositoryA.retireExpiredUnsentAndEnqueueRecovery(
+          wrongDigestInput,
+        ),
+      ),
+    ),
+    /RECOVERY_ARTIFACT_NOT_FOUND/,
+  );
+
+  const nonceIntentReady = await createReadyRelayArtifact(
+    repository,
+    workingDatabase,
+    "expired-recovery-nonce-intent",
+  );
+  const nonceReservation = await relayRepositoryA.reserveNonce({
+    artifact: nonceIntentReady,
+    relayAddress: relayAddress(700_002),
+    preDispatchBlockNumber: 201n,
+    preDispatchBlockHash: hex32("expired-recovery-nonce"),
+    readNonces: async () => ({ latest: 0, pending: 0 }),
+  });
+  assert.equal(nonceReservation.kind, "RESERVED");
+  assert.match(
+    String(
+      await expectRejected(
+        relayRepositoryA.retireExpiredUnsentAndEnqueueRecovery(
+          expiredRecoveryInput(nonceIntentReady),
+        ),
+      ),
+    ),
+    /RECOVERY_RELAY_INTENT_EXISTS/,
+  );
+  const signedIntent = await relayRepositoryA.persistSignedTransaction(
+    nonceReservation.intent.id,
+    {
+      calldata: "0x1234",
+      serializedTransaction: "0x02aa",
+      expectedTxHash: hex32("expired-recovery-signed"),
+      transactionType: "eip1559",
+      gasLimit: 250_000n,
+      maxFeePerGas: 2n,
+      maxPriorityFeePerGas: 1n,
+      preDispatchBlockNumber: 201n,
+      preDispatchBlockHash: hex32("expired-recovery-signed-block"),
+    },
+  );
+  assert.equal(signedIntent?.state, "SIGNED");
+  assert.match(
+    String(
+      await expectRejected(
+        relayRepositoryA.retireExpiredUnsentAndEnqueueRecovery(
+          expiredRecoveryInput(nonceIntentReady),
+        ),
+      ),
+    ),
+    /RECOVERY_RELAY_INTENT_EXISTS/,
+  );
+  const dispatchingIntent = await relayRepositoryA.claimDispatch(
+    nonceReservation.intent.id,
+  );
+  assert.equal(dispatchingIntent?.state, "DISPATCHING");
+  assert.equal(dispatchingIntent?.broadcastAttemptCount, 1);
+  assert.match(
+    String(
+      await expectRejected(
+        relayRepositoryA.retireExpiredUnsentAndEnqueueRecovery(
+          expiredRecoveryInput(nonceIntentReady),
+        ),
+      ),
+    ),
+    /RECOVERY_RELAY_INTENT_EXISTS/,
+  );
+  pass(
+    "recovery rejects wrong digests and every nonce/signed/broadcast-attempt relay intent",
+  );
+
+  function historicalPreflightInput(
+    ready: ReadyToRelayArtifact,
+    relay: `0x${string}` = relayAddress(700_001),
+  ) {
+    return {
+      pactRecordId: ready.pact.id,
+      operationId: ready.operationId,
+      attestationDigest: ready.attestation.digest,
+      expectedChainId: ready.pact.chainId,
+      expectedCommerceContract: ready.pact.commerceContract,
+      expectedPactEvaluator: ready.pact.pactEvaluator,
+      relayAddress: relay,
+    };
+  }
+
+  const shapeAReady = await createReadyRelayArtifact(
+    repository,
+    workingDatabase,
+    "historical-shape-a",
+  );
+  const shapeAResult = await relayRepositoryA.inspectHistoricalRecoveryState(
+    historicalPreflightInput(shapeAReady),
+  );
+  assert.equal(shapeAResult.shape, "SHAPE_A");
+  assert.equal(shapeAResult.artifact.operationId, shapeAReady.operationId);
+  assert.equal(
+    shapeAResult.artifact.attestation.digest,
+    shapeAReady.attestation.digest,
+  );
+  const [shapeAAttestationRow] = await workingDatabase.sql<
+    { active: boolean }[]
+  >`select active from attestations where digest = ${shapeAReady.attestation.digest}`;
+  assert.equal(shapeAAttestationRow?.active, true);
+
+  const retiredResult =
+    await relayRepositoryA.retireExpiredUnsentAndEnqueueRecovery(
+      expiredRecoveryInput(shapeAReady),
+    );
+  const shapeBResult = await relayRepositoryA.inspectHistoricalRecoveryState(
+    historicalPreflightInput(shapeAReady),
+  );
+  assert.equal(shapeBResult.shape, "SHAPE_B");
+  assert.equal(shapeBResult.artifact.operationId, shapeAReady.operationId);
+  assert.equal(
+    shapeBResult.artifact.attestation.digest,
+    shapeAReady.attestation.digest,
+  );
+  const [shapeBAttestationRow] = await workingDatabase.sql<
+    { active: boolean }[]
+  >`select active from attestations where digest = ${shapeAReady.attestation.digest}`;
+  assert.equal(shapeBAttestationRow?.active, false);
+  assert.equal(
+    shapeBResult.recoveryOperationId,
+    retiredResult.recoveryOperationId,
+  );
+  assert.equal(shapeBResult.relayIntentId, retiredResult.relayIntentId);
+  const [shapeBAuditRow] = await workingDatabase.sql<
+    { state: string; nonce: string | null; broadcast_attempt_count: number }[]
+  >`select state, nonce, broadcast_attempt_count from relay_intents where id = ${shapeBResult.relayIntentId}::uuid`;
+  assert.equal(shapeBAuditRow?.state, "EXPIRED_UNSENT");
+  assert.equal(shapeBAuditRow?.nonce, null);
+  assert.equal(shapeBAuditRow?.broadcast_attempt_count, 0);
+
+  const inactiveReady = await createReadyRelayArtifact(
+    repository,
+    workingDatabase,
+    "historical-inactive-attestation",
+  );
+  await workingDatabase.sql`update attestations set active = false where digest = ${inactiveReady.attestation.digest}`;
+  assert.match(
+    String(
+      await expectRejected(
+        relayRepositoryA.inspectHistoricalRecoveryState(
+          historicalPreflightInput(inactiveReady),
+        ),
+      ),
+    ),
+    /READY_TO_RELAY operation has inactive attestation/,
+  );
+
+  const noAuditReady = await createReadyRelayArtifact(
+    repository,
+    workingDatabase,
+    "historical-no-audit",
+  );
+  await relayRepositoryA.retireExpiredUnsentAndEnqueueRecovery(
+    expiredRecoveryInput(noAuditReady),
+  );
+  await workingDatabase.sql`delete from relay_intents where attestation_digest = ${noAuditReady.attestation.digest}`;
+  assert.match(
+    String(
+      await expectRejected(
+        relayRepositoryA.inspectHistoricalRecoveryState(
+          historicalPreflightInput(noAuditReady),
+        ),
+      ),
+    ),
+    /RECOVERY_RELAY_AUDIT_ROW_MISSING|EXPIRED operation has no audit row/,
+  );
+
+  const nonceAuditReady = await createReadyRelayArtifact(
+    repository,
+    workingDatabase,
+    "historical-nonce-audit",
+  );
+  await relayRepositoryA.retireExpiredUnsentAndEnqueueRecovery(
+    expiredRecoveryInput(nonceAuditReady),
+  );
+  await workingDatabase.sql`update relay_intents set nonce = 0 where attestation_digest = ${nonceAuditReady.attestation.digest}`;
+  assert.match(
+    String(
+      await expectRejected(
+        relayRepositoryA.inspectHistoricalRecoveryState(
+          historicalPreflightInput(nonceAuditReady),
+        ),
+      ),
+    ),
+    /RECOVERY_RELAY_AUDIT_INVALID|old audit has nonce/,
+  );
+
+  const broadcastAuditReady = await createReadyRelayArtifact(
+    repository,
+    workingDatabase,
+    "historical-broadcast-audit",
+  );
+  await relayRepositoryA.retireExpiredUnsentAndEnqueueRecovery(
+    expiredRecoveryInput(broadcastAuditReady),
+  );
+  await workingDatabase.sql`update relay_intents set broadcast_attempt_count = 1 where attestation_digest = ${broadcastAuditReady.attestation.digest}`;
+  assert.match(
+    String(
+      await expectRejected(
+        relayRepositoryA.inspectHistoricalRecoveryState(
+          historicalPreflightInput(broadcastAuditReady),
+        ),
+      ),
+    ),
+    /RECOVERY_RELAY_AUDIT_INVALID|old audit has broadcast attempt/,
+  );
+
+  const preRecovOpReady = await createReadyRelayArtifact(
+    repository,
+    workingDatabase,
+    "historical-pre-recov-op",
+  );
+  await workingDatabase.db.insert(operations).values({
+    id: crypto.randomUUID(),
+    pactRecordId: preRecovOpReady.pact.id,
+    triggerKind: "RECOVERY",
+    triggerKey: `expired-attestation:${preRecovOpReady.attestation.digest}`,
+    state: "EXPIRED",
+  });
+  assert.match(
+    String(
+      await expectRejected(
+        relayRepositoryA.inspectHistoricalRecoveryState(
+          historicalPreflightInput(preRecovOpReady),
+        ),
+      ),
+    ),
+    /RECOVERY_OPERATION_ALREADY_EXISTS|recovery operation exists while old artifact active/,
+  );
+
+  const multiRecovReady = await createReadyRelayArtifact(
+    repository,
+    workingDatabase,
+    "historical-multi-recov",
+  );
+  await relayRepositoryA.retireExpiredUnsentAndEnqueueRecovery(
+    expiredRecoveryInput(multiRecovReady),
+  );
+  // A historical terminal recovery operation for another digest is PERMITTED
+  await workingDatabase.db.insert(operations).values({
+    id: crypto.randomUUID(),
+    pactRecordId: multiRecovReady.pact.id,
+    triggerKind: "RECOVERY",
+    triggerKey: `expired-attestation:${hex32("unrelated-older-digest")}`,
+    state: "EXPIRED",
+  });
+  const permittedShapeB = await relayRepositoryA.inspectHistoricalRecoveryState(
+    historicalPreflightInput(multiRecovReady),
+  );
+  assert.equal(permittedShapeB.shape, "SHAPE_B");
+
+  const activeIntentReady = await createReadyRelayArtifact(
+    repository,
+    workingDatabase,
+    "historical-active-intent",
+  );
+  await relayRepositoryA.retireExpiredUnsentAndEnqueueRecovery(
+    expiredRecoveryInput(activeIntentReady),
+  );
+  await workingDatabase.sql`update relay_intents set state = 'PREPARING' where attestation_digest = ${activeIntentReady.attestation.digest}`;
+  assert.match(
+    String(
+      await expectRejected(
+        relayRepositoryA.inspectHistoricalRecoveryState(
+          historicalPreflightInput(activeIntentReady),
+        ),
+      ),
+    ),
+    /RECOVERY_RELAY_AUDIT_INVALID/,
+  );
+
+  const wrongRelayReady = await createReadyRelayArtifact(
+    repository,
+    workingDatabase,
+    "historical-wrong-relay",
+  );
+  await relayRepositoryA.retireExpiredUnsentAndEnqueueRecovery(
+    expiredRecoveryInput(wrongRelayReady),
+  );
+  assert.match(
+    String(
+      await expectRejected(
+        relayRepositoryA.inspectHistoricalRecoveryState(
+          historicalPreflightInput(wrongRelayReady, relayAddress(999_999)),
+        ),
+      ),
+    ),
+    /RECOVERY_RELAY_AUDIT_INVALID|relay intent wrong relay identity/,
+  );
+
+  pass(
+    "historical recovery state distinguishes Shape A, Shape B, and rejects all hybrid/corrupted states",
+  );
+
+  // --- REPEATED ATTESTATION RECOVERY CYCLE ---
+  const repeatReadyA = await createReadyRelayArtifact(
+    repository,
+    workingDatabase,
+    "repeat-cycle-initial",
+  );
+  // Cycle 1: Attestation A expires
+  const shapeA1 = await relayRepositoryA.inspectHistoricalRecoveryState(
+    historicalPreflightInput(repeatReadyA),
+  );
+  assert.equal(shapeA1.shape, "SHAPE_A");
+  const retiredA = await relayRepositoryA.retireExpiredUnsentAndEnqueueRecovery(
+    expiredRecoveryInput(repeatReadyA),
+  );
+  assert.equal(retiredA.reused, false);
+  const shapeB1 = await relayRepositoryA.inspectHistoricalRecoveryState(
+    historicalPreflightInput(repeatReadyA),
+  );
+  assert.equal(shapeB1.shape, "SHAPE_B");
+
+  // Cycle 1 completion: Attestation B becomes READY_TO_RELAY
+  const evidenceB = evidenceFixture(repeatReadyA.pact, "repeat-cycle-fresh-b");
+  const attestationB = attestationFixture({
+    pact: repeatReadyA.pact,
+    ...evidenceB,
+    label: "repeat-cycle-fresh-b",
+  });
+  await workingDatabase.db.insert(chainReconciliations).values({
+    id: crypto.randomUUID(),
+    operationId: retiredA.recoveryOperationId,
+    attemptNumber: 1,
+    outcome: "READY",
+    blockNumber: "301",
+    blockHash: hex32("repeat-cycle-fresh-b-block"),
+    blockTimestamp: evidenceB.evidence.observedAt.toString(),
+    chainId: repeatReadyA.pact.chainId.toString(),
+    pactEvaluator: repeatReadyA.pact.pactEvaluator,
+    commerceContract: repeatReadyA.pact.commerceContract,
+    jobId: repeatReadyA.pact.jobId.toString(),
+    jobKey: repeatReadyA.pact.jobKey,
+    bindingExists: true,
+    bindingConditionHash: repeatReadyA.pact.conditionHash,
+    bindingCompletionDeadline: repeatReadyA.pact.completionDeadline.toString(),
+    bindingVerifier: attestationB.signer,
+    bindingAccepted: false,
+    verifierRevoked: false,
+    jobClient: expiredRecoveryInput(repeatReadyA).expectedClient,
+    jobProvider: expiredRecoveryInput(repeatReadyA).expectedProvider,
+    jobEvaluator: repeatReadyA.pact.pactEvaluator,
+    jobStatus: 2,
+    jobExpiredAt:
+      expiredRecoveryInput(repeatReadyA).snapshot.jobExpiredAt.toString(),
+  });
+  await repository.transitionOperation(
+    retiredA.recoveryOperationId,
+    ["PENDING"],
+    "SIGNING",
+  );
+  await repository.persistReadyToRelay(
+    retiredA.recoveryOperationId,
+    repeatReadyA.pact.id,
+    evidenceB.evidence,
+    evidenceB.evidenceHash,
+    attestationB,
+  );
+  const repeatReadyB = await relayRepositoryA.getActiveArtifactForOperation(
+    retiredA.recoveryOperationId,
+  );
+  assert.ok(repeatReadyB !== undefined);
+  assert.equal(repeatReadyB.attestation.digest, attestationB.digest);
+
+  // Cycle 2: Attestation B expires!
+  const shapeA2 = await relayRepositoryA.inspectHistoricalRecoveryState(
+    historicalPreflightInput(repeatReadyB),
+  );
+  assert.equal(shapeA2.shape, "SHAPE_A");
+  const expiredInputB = expiredRecoveryInput(repeatReadyB, {
+    blockTimestamp: attestationB.validUntil + 100n,
+  });
+  const retiredB =
+    await relayRepositoryA.retireExpiredUnsentAndEnqueueRecovery(expiredInputB);
+  assert.equal(retiredB.reused, false);
+  assert.notEqual(retiredB.recoveryOperationId, retiredA.recoveryOperationId);
+  const shapeB2 = await relayRepositoryA.inspectHistoricalRecoveryState(
+    historicalPreflightInput(repeatReadyB),
+  );
+  assert.equal(shapeB2.shape, "SHAPE_B");
+
+  // Cycle 2 completion: Attestation C becomes READY_TO_RELAY
+  const evidenceC = evidenceFixture(repeatReadyA.pact, "repeat-cycle-fresh-c");
+  const attestationC = attestationFixture({
+    pact: repeatReadyA.pact,
+    ...evidenceC,
+    label: "repeat-cycle-fresh-c",
+  });
+  await workingDatabase.db.insert(chainReconciliations).values({
+    id: crypto.randomUUID(),
+    operationId: retiredB.recoveryOperationId,
+    attemptNumber: 1,
+    outcome: "READY",
+    blockNumber: "302",
+    blockHash: hex32("repeat-cycle-fresh-c-block"),
+    blockTimestamp: evidenceC.evidence.observedAt.toString(),
+    chainId: repeatReadyA.pact.chainId.toString(),
+    pactEvaluator: repeatReadyA.pact.pactEvaluator,
+    commerceContract: repeatReadyA.pact.commerceContract,
+    jobId: repeatReadyA.pact.jobId.toString(),
+    jobKey: repeatReadyA.pact.jobKey,
+    bindingExists: true,
+    bindingConditionHash: repeatReadyA.pact.conditionHash,
+    bindingCompletionDeadline: repeatReadyA.pact.completionDeadline.toString(),
+    bindingVerifier: attestationC.signer,
+    bindingAccepted: false,
+    verifierRevoked: false,
+    jobClient: expiredInputB.expectedClient,
+    jobProvider: expiredInputB.expectedProvider,
+    jobEvaluator: repeatReadyA.pact.pactEvaluator,
+    jobStatus: 2,
+    jobExpiredAt: expiredInputB.snapshot.jobExpiredAt.toString(),
+  });
+  await repository.transitionOperation(
+    retiredB.recoveryOperationId,
+    ["PENDING"],
+    "SIGNING",
+  );
+  await repository.persistReadyToRelay(
+    retiredB.recoveryOperationId,
+    repeatReadyA.pact.id,
+    evidenceC.evidence,
+    evidenceC.evidenceHash,
+    attestationC,
+  );
+
+  // Assertions proving:
+  // 1. Both old attestations/history preserved:
+  const [inactiveAttestations] = await workingDatabase.sql<{ value: number }[]>`
+    select count(*)::int as value from attestations
+    where pact_record_id = ${repeatReadyA.pact.id}::uuid and active = false
+  `;
+  assert.equal(inactiveAttestations?.value, 2);
+  const [evidenceCount] = await workingDatabase.sql<{ value: number }[]>`
+    select count(*)::int as value from evidence_records
+    where evidence_hash in (${repeatReadyA.attestation.evidenceHash}, ${evidenceB.evidenceHash}, ${evidenceC.evidenceHash})
+  `;
+  assert.equal(evidenceCount?.value, 3);
+
+  // 2. Exactly one fresh active attestation remains:
+  const [cycleActiveAttestations] = await workingDatabase.sql<
+    { value: number }[]
+  >`
+    select count(*)::int as value from attestations
+    where pact_record_id = ${repeatReadyA.pact.id}::uuid and active = true
+  `;
+  assert.equal(cycleActiveAttestations?.value, 1);
+  const activeArtifactC = await relayRepositoryA.getActiveArtifactForOperation(
+    retiredB.recoveryOperationId,
+  );
+  assert.equal(activeArtifactC?.attestation.digest, attestationC.digest);
+
+  // 3. No relay transaction capability is created:
+  const retiredIntents = await workingDatabase.sql<
+    {
+      state: string;
+      nonce: string | null;
+      calldata: string | null;
+      serialized_transaction: string | null;
+      expected_tx_hash: string | null;
+      broadcast_attempt_count: number;
+    }[]
+  >`
+    select state, nonce, calldata, serialized_transaction, expected_tx_hash, broadcast_attempt_count
+    from relay_intents
+    where pact_record_id = ${repeatReadyA.pact.id}::uuid
+  `;
+  assert.equal(retiredIntents.length, 2);
+  for (const row of retiredIntents) {
+    assert.equal(row.state, "EXPIRED_UNSENT");
+    assert.equal(row.nonce, null);
+    assert.equal(row.calldata, null);
+    assert.equal(row.serialized_transaction, null);
+    assert.equal(row.expected_tx_hash, null);
+    assert.equal(row.broadcast_attempt_count, 0);
+  }
+  const [freshIntents] = await workingDatabase.sql<{ value: number }[]>`
+    select count(*)::int as value from relay_intents
+    where attestation_digest = ${attestationC.digest}
+  `;
+  assert.equal(freshIntents?.value, 0);
+
+  // 4. No broadcast occurs:
+  const [totalBroadcasts] = await workingDatabase.sql<{ total: number }[]>`
+    select coalesce(sum(broadcast_attempt_count), 0)::int as total
+    from relay_intents
+    where pact_record_id = ${repeatReadyA.pact.id}::uuid
+  `;
+  assert.equal(totalBroadcasts?.total, 0);
+
+  pass(
+    "repeated expired-attestation recovery preserves full history across consecutive cycles with single active artifact",
+  );
 
   const semanticOperationsBefore = await countRows("operations");
   const semanticArtifactsBefore = await countRows("attestations");

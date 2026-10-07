@@ -48,6 +48,12 @@ const TRANSITIONAL_STATES: readonly OperationState[] = [
   "READY_TO_SIGN",
   "SIGNING",
 ];
+const RECOVERY_RESTARTABLE_STATES: readonly OperationState[] = [
+  ...TRANSITIONAL_STATES,
+  "NOT_SATISFIED_RETRYABLE",
+  "INDETERMINATE",
+  "CHAIN_RETRYABLE",
+];
 type PactRow = typeof pactRecords.$inferSelect;
 type OperationRow = typeof operations.$inferSelect;
 type EvidenceRow = typeof evidenceRecords.$inferSelect;
@@ -586,5 +592,51 @@ export class PostgresPactRepository implements PactRepository {
       )
       .returning({ id: operations.id });
     return rows.length;
+  }
+
+  async recoverInterruptedRecoveryOperation(
+    operationId: string,
+    triggerKey: string,
+  ): Promise<OperationRecord> {
+    return this.#database.db.transaction(async (tx) => {
+      const [operation] = await tx
+        .select()
+        .from(operations)
+        .where(eq(operations.id, operationId))
+        .limit(1);
+      if (
+        operation === undefined ||
+        operation.triggerKind !== "RECOVERY" ||
+        operation.triggerKey !== triggerKey
+      )
+        throw new Error("RECOVERY_OPERATION_IDENTITY_MISMATCH");
+      if (operation.state === "PENDING" || operation.state === "READY_TO_RELAY")
+        return asOperation(operation);
+      if (
+        !RECOVERY_RESTARTABLE_STATES.includes(operation.state as OperationState)
+      )
+        throw new Error(`RECOVERY_OPERATION_TERMINAL:${operation.state}`);
+      const [recovered] = await tx
+        .update(operations)
+        .set({
+          state: "PENDING",
+          code: "RECOVERED_AFTER_RESTART",
+          retryable: true,
+          version: sql`${operations.version} + 1`,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(operations.id, operationId),
+            eq(operations.triggerKind, "RECOVERY"),
+            eq(operations.triggerKey, triggerKey),
+            inArray(operations.state, [...RECOVERY_RESTARTABLE_STATES]),
+          ),
+        )
+        .returning();
+      if (recovered === undefined)
+        throw new Error("RECOVERY_OPERATION_RESTART_CAS_FAILED");
+      return asOperation(recovered);
+    });
   }
 }
