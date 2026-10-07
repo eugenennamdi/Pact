@@ -1,0 +1,342 @@
+{
+  "schemaVersion": 1,
+  "artifactId": "arc-mainnet-job-2",
+  "immutable": true,
+  "network": "arc-mainnet",
+  "environment": "mainnet",
+  "chainId": 5042,
+  "explorerBaseUrl": "https://explorer.arc.io",
+  "slug": null,
+  "contracts": {
+    "implementation": "0x4B46C1aa98B1d82cF4eeFFDDD129a57402851901",
+    "commerce": "0x9Da745D2A6e03b049bdAE5aE7a193f1B00E520d6",
+    "pactEvaluator": "0x3fd3AC5bE6eE41DcD11233833DCD96c21F3b1129",
+    "usdc": "0x3600000000000000000000000000000000000000"
+  },
+  "actors": {
+    "client": "0x1f320aF0E8F11b89eD88ddD8C549B39F6081954b",
+    "provider": "0xd857612A587DF68b0C2627208Bdd9F934695A231",
+    "verifier": "0x8660A25bf52D24EbD1C4DFcF602840114b92c48d",
+    "relay": "0x49a5F99Cdf8b9683459A467e9b71a554495Ecc52",
+    "treasury": "0x369B2318bA3C63BCE48892e92476465D7098D11E"
+  },
+  "job": {
+    "id": "2",
+    "jobKey": "0x70d001701d55ebac31a299ab7301938a0c002a355311cdac3da784311822294d",
+    "status": "COMPLETED",
+    "description": "Pact controlled PR_MERGED settlement",
+    "canonicalSettledAmount": "0"
+  },
+  "condition": {
+    "schemaVersion": 1,
+    "provider": "github",
+    "repository": "eugenennamdi/pact-arc-demo",
+    "pullRequest": 7,
+    "baseBranch": "main",
+    "event": "PR_MERGED"
+  },
+  "conditionHash": "0x4b7db1c86d6421e6f34c05bdc2b8fd0dbf82c3eb564b3a77ee0578fa1d6393d1",
+  "budget": {
+    "baseUnits": "10000",
+    "decimals": 6,
+    "display": "0.01 USDC",
+    "token": "0x3600000000000000000000000000000000000000"
+  },
+  "deadlines": {
+    "preparedTimestamp": null,
+    "completionDeadline": "1791394485",
+    "expiry": "1791459285"
+  },
+  "walletActions": [
+    {
+      "action": "CREATE_JOB",
+      "label": "Job Created",
+      "category": "WALLET_ACTION",
+      "role": "CLIENT",
+      "txHash": "0x241408659ae022529bb3215fba47296fdb4860726572c394bf92384f2ac1a38b",
+      "blockNumber": "24724782",
+      "blockHash": "0xef3d2aa1c98905d85ce14ea7f7d5568fbaa1be52fc6cbf8710bfb0e10f5bbf1c",
+      "transactionIndex": 3,
+      "timestamp": "1791373252",
+      "from": "0x1f320aF0E8F11b89eD88ddD8C549B39F6081954b",
+      "to": "0x9Da745D2A6e03b049bdAE5aE7a193f1B00E520d6",
+      "nonce": 9,
+      "value": "0",
+      "gasUsed": "190065",
+      "effectiveGasPrice": "20000001001",
+      "gasCost": "3801300190255065",
+      "selector": "0xbaf3ede2",
+      "method": "createJob",
+      "arguments": {
+        "provider": "0xd857612A587DF68b0C2627208Bdd9F934695A231",
+        "evaluator": "0x3fd3AC5bE6eE41DcD11233833DCD96c21F3b1129",
+        "expiredAt": "1791459285",
+        "description": "Pact controlled PR_MERGED settlement",
+        "hook": "0x0000000000000000000000000000000000000000",
+        "providerAgentId": "0"
+      },
+      "receiptStatus": "SUCCESS",
+      "canonicalEvent": {
+        "name": "JobCreated",
+        "logIndex": 3
+      }
+    },
+    {
+      "action": "BIND_CONDITION",
+      "label": "Condition Bound",
+      "category": "WALLET_ACTION",
+      "role": "CLIENT",
+      "txHash": "0xaad84a0392fd74260fd1d6db32fbaad48ef65f62edccefcd36830716e8d95755",
+      "blockNumber": "24728966",
+      "blockHash": "0x69fefd9597243968be302ba605184130f5278bf9164281bae6c67ea12fe3b9f1",
+      "transactionIndex": 4,
+      "timestamp": "1791375375",
+      "from": "0x1f320aF0E8F11b89eD88ddD8C549B39F6081954b",
+      "to": "0x3fd3AC5bE6eE41DcD11233833DCD96c21F3b1129",
+      "nonce": 10,
+      "value": "0",
+      "gasUsed": "112645",
+      "effectiveGasPrice": "20000001151",
+      "gasCost": "2252900129654395",
+      "selector": "0x626b3a03",
+      "method": "bindCondition",
+      "arguments": {
+        "jobId": "2",
+        "conditionHash": "0x4b7db1c86d6421e6f34c05bdc2b8fd0dbf82c3eb564b3a77ee0578fa1d6393d1",
+        "completionDeadline": "1791394485",
+        "expectedVerifier": "0x8660A25bf52D24EbD1C4DFcF602840114b92c48d"
+      },
+      "receiptStatus": "SUCCESS",
+      "canonicalEvent": {
+        "name": "ConditionBound",
+        "logIndex": 2
+      }
+    },
+    {
+      "action": "SET_BUDGET",
+      "label": "Amount Confirmed",
+      "category": "WALLET_ACTION",
+      "role": "PROVIDER",
+      "txHash": "0x8b97d7fa6ac70fee2b3d93b53886d7372cb2792b1a234348d617e93b84d26e5b",
+      "blockNumber": "24729867",
+      "blockHash": "0xd9eb6b81e21f65f1a532b443e3486f77f8cf52a721e5c50dbd6cd541777e305b",
+      "transactionIndex": 3,
+      "timestamp": "1791375832",
+      "from": "0xd857612A587DF68b0C2627208Bdd9F934695A231",
+      "to": "0x9Da745D2A6e03b049bdAE5aE7a193f1B00E520d6",
+      "nonce": 2,
+      "value": "0",
+      "gasUsed": "90240",
+      "effectiveGasPrice": "20000001001",
+      "gasCost": "1804800090330240",
+      "selector": "0xf3302b89",
+      "method": "setBudget",
+      "arguments": {
+        "jobId": "2",
+        "paymentToken": "0x3600000000000000000000000000000000000000",
+        "amount": "10000",
+        "optParams": "0x"
+      },
+      "receiptStatus": "SUCCESS",
+      "canonicalEvent": {
+        "name": "BudgetSet",
+        "logIndex": 10
+      }
+    },
+    {
+      "action": "APPROVE_USDC",
+      "label": "USDC Approved",
+      "category": "WALLET_ACTION",
+      "role": "CLIENT",
+      "txHash": "0x5462160bb02e86b55fb70d2d9a54b5407a82939561438583649d4554549103cf",
+      "blockNumber": "24731208",
+      "blockHash": "0xfc31c8c040d831d2b9098f43a5c595280630b511666d7a388a8a2d0052ce406a",
+      "transactionIndex": 1,
+      "timestamp": "1791376513",
+      "from": "0x1f320aF0E8F11b89eD88ddD8C549B39F6081954b",
+      "to": "0x3600000000000000000000000000000000000000",
+      "nonce": 11,
+      "value": "0",
+      "gasUsed": "55414",
+      "effectiveGasPrice": "20000001151",
+      "gasCost": "1108280063781514",
+      "selector": "0x095ea7b3",
+      "method": "approve",
+      "arguments": {
+        "spender": "0x9Da745D2A6e03b049bdAE5aE7a193f1B00E520d6",
+        "amount": "10000"
+      },
+      "receiptStatus": "SUCCESS",
+      "canonicalEvent": {
+        "name": "Approval",
+        "logIndex": 3
+      }
+    },
+    {
+      "action": "FUND",
+      "label": "Escrow Funded",
+      "category": "WALLET_ACTION",
+      "role": "CLIENT",
+      "txHash": "0xb039426dbd6789a7fce2556fdde7ba46bf78e67ba43e0c7c08212c2eeafd29cf",
+      "blockNumber": "24732866",
+      "blockHash": "0x27acb2eb3279339ed27f44dc279ba8cc88d42a74d0c0d55ed38b4a04c3df5b16",
+      "transactionIndex": 2,
+      "timestamp": "1791377354",
+      "from": "0x1f320aF0E8F11b89eD88ddD8C549B39F6081954b",
+      "to": "0x9Da745D2A6e03b049bdAE5aE7a193f1B00E520d6",
+      "nonce": 12,
+      "value": "0",
+      "gasUsed": "82229",
+      "effectiveGasPrice": "20000001001",
+      "gasCost": "1644580082311229",
+      "selector": "0x1f989ec8",
+      "method": "fund",
+      "arguments": {
+        "jobId": "2",
+        "paymentToken": "0x3600000000000000000000000000000000000000",
+        "amount": "10000",
+        "optParams": "0x"
+      },
+      "receiptStatus": "SUCCESS",
+      "canonicalEvent": {
+        "name": "JobFunded",
+        "logIndex": 9
+      }
+    },
+    {
+      "action": "SUBMIT",
+      "label": "Work Submitted",
+      "category": "WALLET_ACTION",
+      "role": "PROVIDER",
+      "txHash": "0x7f57b2d789e195c6340be7d9ba438907ecf0f9d884d0449c7f9ab9d18aaad253",
+      "blockNumber": "24734551",
+      "blockHash": "0xbef97808925a13ebf2a221be80ec83cdb5b1b88924cd6ce6102c43fb53c860b9",
+      "transactionIndex": 3,
+      "timestamp": "1791378209",
+      "from": "0xd857612A587DF68b0C2627208Bdd9F934695A231",
+      "to": "0x9Da745D2A6e03b049bdAE5aE7a193f1B00E520d6",
+      "nonce": 3,
+      "value": "0",
+      "gasUsed": "51922",
+      "effectiveGasPrice": "20000001151",
+      "gasCost": "1038440059762222",
+      "selector": "0x9e63798d",
+      "method": "submit",
+      "arguments": {
+        "jobId": "2",
+        "deliverable": "0x4b7db1c86d6421e6f34c05bdc2b8fd0dbf82c3eb564b3a77ee0578fa1d6393d1",
+        "optParams": "0x"
+      },
+      "receiptStatus": "SUCCESS",
+      "canonicalEvent": {
+        "name": "JobSubmitted",
+        "logIndex": 6
+      }
+    }
+  ],
+  "githubEvidence": {
+    "schemaVersion": 1,
+    "repository": "eugenennamdi/pact-arc-demo",
+    "pullRequest": 7,
+    "baseBranch": "main",
+    "mergeCommitSha": "0xfbe64ea0b2975c5a4c5a2129a6717309049dc963",
+    "mergedAt": "1791378395",
+    "observedAt": "1791408339"
+  },
+  "evidenceHash": "0x49dc4aff1ef5dd759f4f84f802001f5169cd12636342193e02988cebd5406d65",
+  "attestation": {
+    "commerceContract": "0x9Da745D2A6e03b049bdAE5aE7a193f1B00E520d6",
+    "jobId": "2",
+    "conditionHash": "0x4b7db1c86d6421e6f34c05bdc2b8fd0dbf82c3eb564b3a77ee0578fa1d6393d1",
+    "evidenceHash": "0x49dc4aff1ef5dd759f4f84f802001f5169cd12636342193e02988cebd5406d65",
+    "satisfiedAt": "1791378395",
+    "verifiedAt": "1791408339",
+    "validUntil": "1791408639",
+    "verifier": "0x8660A25bf52D24EbD1C4DFcF602840114b92c48d",
+    "signature": "0x15b3e7f52b5c6465e5ff02a6118096438e2bfa052beeff6b64af70769e20e1b365ad371efcecef29a41e9e6d63e0a730284ce0bb5edff8325fce016b072b10421c",
+    "digest": "0x83682c4c85f880e39c90dfdadffc4cb0c6536348b24a50311a3d18eaf2300888",
+    "recoveredSigner": "0x8660A25bf52D24EbD1C4DFcF602840114b92c48d",
+    "valid": true
+  },
+  "relay": {
+    "transactionHash": "0x48310ebfa80301d5f48e6ac61be74cbaaf37f9eff141e82885fd20a5a9d166aa",
+    "blockNumber": "24794104",
+    "blockHash": "0x783de195d2edd543f12c75761a3e08b67521f68b1289e75ad31a0e3916b28e94",
+    "transactionIndex": 3,
+    "timestamp": "1791408424",
+    "from": "0x49a5F99Cdf8b9683459A467e9b71a554495Ecc52",
+    "to": "0x3fd3AC5bE6eE41DcD11233833DCD96c21F3b1129",
+    "nonce": 1,
+    "value": "0",
+    "selector": "0xfd066911",
+    "method": "completeWithAttestation",
+    "gasUsed": "166059",
+    "effectiveGasPrice": "20000005344",
+    "gasCost": "3321180887419296",
+    "receiptStatus": "SUCCESS",
+    "pactCompletionAcceptedLogIndex": 23,
+    "jobCompletedLogIndex": 27,
+    "paymentReleasedLogIndex": 26,
+    "broadcastCount": 1,
+    "broadcastUnknownCount": 0
+  },
+  "settlement": {
+    "outcome": "COMPLETED",
+    "finalJobStatus": 3,
+    "bindingAccepted": true,
+    "grossSettledAmount": "10000",
+    "providerPayout": "10000",
+    "treasuryPayout": "0",
+    "evaluatorPayout": "0",
+    "completionReason": "0x49dc4aff1ef5dd759f4f84f802001f5169cd12636342193e02988cebd5406d65",
+    "nextActor": "NONE",
+    "nextAction": "NONE"
+  },
+  "accounting": {
+    "principal": "10000",
+    "clientBeforeFund": "241850",
+    "escrowBeforeFund": "0",
+    "clientAfterFund": "230206",
+    "escrowAfterFund": "10000",
+    "providerBeforeComplete": "104313",
+    "providerAfterComplete": "114313",
+    "escrowAfterComplete": "0",
+    "residualAllowance": "0",
+    "gasUnit": "ARC_NATIVE_18_DECIMALS"
+  },
+  "recovery": {
+    "historical": {
+      "operationId": "932711d6-dda1-400c-8988-5bb405448303",
+      "evidenceHash": "0x5214beeb56ab86c68824e8dfb9cfabfebb0d4005072aeeb2b7e6ce5970c1ffe5",
+      "attestationDigest": "0x0a2b0620199ece37f72d64f577c083d03c30c68273dfa940aa31e3b1f2ab9644",
+      "verifiedAt": "1791386957",
+      "validUntil": "1791387257",
+      "operationState": "EXPIRED",
+      "attestationActive": false,
+      "relayState": "EXPIRED_UNSENT",
+      "relayCode": "ATTESTATION_OR_JOB_EXPIRED",
+      "nonce": null,
+      "calldata": null,
+      "serializedTransaction": null,
+      "expectedTxHash": null,
+      "returnedTxHash": null,
+      "broadcastAttemptCount": 0
+    },
+    "recovery": {
+      "operationId": "95cf7937-55f0-45a5-9609-1ae117ce4ef4",
+      "evidenceHash": "0x49dc4aff1ef5dd759f4f84f802001f5169cd12636342193e02988cebd5406d65",
+      "attestationDigest": "0x83682c4c85f880e39c90dfdadffc4cb0c6536348b24a50311a3d18eaf2300888",
+      "verifiedAt": "1791408339",
+      "validUntil": "1791408639"
+    },
+    "relayNonceBefore": 1,
+    "relayNonceAfter": 2
+  },
+  "sourceProvenance": {
+    "proofSourceCommit": "1eb711a67d24b33a04dfb18c87f27767625e6bd7",
+    "deploymentCommit": "b5792c756b04fae543b1d3d92a337858ea9f529d",
+    "runtimeCommit": "92932adab77a246a4492bc08464d13d38263366e",
+    "erc8183SourceCommit": "142e669c1fd318486a4628395b629f033654dd06",
+    "certifiedEvidenceCheckpoint": "5b74ee0718d5a609d0da53ea52e73ab5e0299b45"
+  }
+}

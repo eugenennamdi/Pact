@@ -1,7 +1,14 @@
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { selectProofEnvironment } from "./artifacts";
+import {
+  getMainnetProof,
+  getSettlementProof,
+  mainnetJob1Proof,
+  mainnetJob2Proof,
+  selectProofEnvironment,
+  testnetProof,
+} from "./artifacts";
 
 const pathFromHere = (relative: string) =>
   fileURLToPath(new URL(relative, import.meta.url));
@@ -17,6 +24,9 @@ describe("proof selection and route contract", () => {
     expect(selectProofEnvironment(undefined)).toBe("mainnet");
     expect(selectProofEnvironment("mainnet")).toBe("mainnet");
     expect(selectProofEnvironment("malformed")).toBe("mainnet");
+    expect(getSettlementProof(undefined)).toBe(mainnetJob2Proof);
+    expect(getSettlementProof("mainnet")).toBe(mainnetJob2Proof);
+    expect(getSettlementProof("testnet")).toBe(testnetProof);
   });
 
   it("keeps the proof route deterministic and free of persisted selection", async () => {
@@ -33,9 +43,26 @@ describe("proof selection and route contract", () => {
     expect(component).not.toMatch(/\.slice\([^)]*hash|truncateHex/);
   });
 
-  it("preserves the legacy Mainnet proof URL with an intentional redirect", async () => {
+  it("preserves stable direct Mainnet job routes", async () => {
     const legacy = await source("../app/proof/arc-mainnet/job/1/page.tsx");
-    expect(legacy).toContain('redirect("/proof?network=mainnet")');
+    const current = await source("../app/proof/arc-mainnet/job/2/page.tsx");
+    expect(getMainnetProof("1")).toBe(mainnetJob1Proof);
+    expect(getMainnetProof("2")).toBe(mainnetJob2Proof);
+    expect(legacy).toContain('getMainnetProof("1")');
+    expect(current).toContain('getMainnetProof("2")');
+    expect(legacy).not.toContain("redirect");
+    expect(current).not.toContain("redirect");
     expect(legacy).not.toContain("eth_sendTransaction");
+    expect(current).not.toContain("eth_sendTransaction");
+  });
+
+  it("renders recovery lineage only when an artifact supplies it", async () => {
+    const component = await source("../frontend/proof-center.tsx");
+    expect(mainnetJob1Proof.recovery).toBeUndefined();
+    expect(testnetProof.recovery).toBeUndefined();
+    expect(mainnetJob2Proof.recovery).toBeDefined();
+    expect(component).toContain("if (lineage === undefined) return null");
+    expect(component).toContain("Recovery lineage");
+    expect(component).toContain("Retired unsent");
   });
 });

@@ -1,4 +1,5 @@
-import mainnetJson from "./artifacts/arc-mainnet-job-1.json";
+import mainnetJob1Json from "./artifacts/arc-mainnet-job-1.json";
+import mainnetJob2Json from "./artifacts/arc-mainnet-job-2.json";
 import testnetJson from "./artifacts/arc-testnet-job-6.json";
 import {
   assertPublicProofDto,
@@ -7,9 +8,15 @@ import {
   type SettlementProofArtifact,
 } from "./schema";
 
-export const mainnetProof = assertPublicProofDto(
-  validateSettlementProofArtifact(mainnetJson),
+export const mainnetJob1Proof = assertPublicProofDto(
+  validateSettlementProofArtifact(mainnetJob1Json),
 );
+
+export const mainnetJob2Proof = assertPublicProofDto(
+  validateSettlementProofArtifact(mainnetJob2Json),
+);
+
+export const mainnetProof = mainnetJob2Proof;
 
 export const testnetProof = assertPublicProofDto(
   validateSettlementProofArtifact(testnetJson),
@@ -28,4 +35,8 @@ export function selectProofEnvironment(value: unknown): ProofEnvironment {
 
 export function getSettlementProof(value: unknown): SettlementProofArtifact {
   return proofsByEnvironment[selectProofEnvironment(value)];
+}
+
+export function getMainnetProof(jobId: "1" | "2"): SettlementProofArtifact {
+  return jobId === "1" ? mainnetJob1Proof : mainnetJob2Proof;
 }
