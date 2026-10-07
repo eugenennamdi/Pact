@@ -24,7 +24,8 @@
     "id": "1",
     "jobKey": "0x706482cc95912557b8d50d99e27f782cb761a478673644bcd4b6344e46c61e63",
     "status": "COMPLETED",
-    "description": "Pact controlled PR_MERGED settlement"
+    "description": "Pact controlled PR_MERGED settlement",
+    "canonicalSettledAmount": "0"
   },
   "condition": {
     "schemaVersion": 1,
@@ -265,7 +266,7 @@
     "outcome": "COMPLETED",
     "finalJobStatus": 3,
     "bindingAccepted": true,
-    "settledAmount": "100000",
+    "grossSettledAmount": "100000",
     "providerPayout": "100000",
     "treasuryPayout": "0",
     "evaluatorPayout": "0",

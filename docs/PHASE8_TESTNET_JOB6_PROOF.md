@@ -13,7 +13,7 @@ accounting. It contains no runtime credentials or signing material.
 
 The source freeze is the SHA-256 of the artifact's exact bytes:
 
-`c83e09ef92ec06071ba4ac2d94ec3abf037da9153b9517ee2cc0c640865c47a5`
+`d322fdd53fa6193d68d8ed22e39617d40b24721109b528c2788d3a76230e141f`
 
 `apps/web/proof/proof.test.ts` recomputes the condition hash, evidence hash,
 EIP-712 digest, recovered verifier, lifecycle ordering, and artifact

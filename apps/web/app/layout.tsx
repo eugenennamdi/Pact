@@ -33,8 +33,8 @@ export default function RootLayout({ children }: { children: ReactNode }) {
                   <Link href="/create" className="nav-link">
                     Create Pact
                   </Link>
-                  <Link href="/proof/arc-mainnet/job/1" className="nav-link">
-                    Mainnet proof
+                  <Link href="/proof" className="nav-link">
+                    Proof center
                   </Link>
                 </nav>
                 <WalletHeaderControl />
@@ -51,9 +51,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
               <div className="footer-links">
                 <span>ERC-8183 Escrow</span>
                 <span>PactEvaluator</span>
-                <Link href="/proof/arc-mainnet/job/1">
-                  Certified Mainnet Proof
-                </Link>
+                <Link href="/proof">Proof Center</Link>
               </div>
             </div>
           </footer>

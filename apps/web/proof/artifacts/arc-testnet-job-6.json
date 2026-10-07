@@ -24,7 +24,8 @@
     "id": "6",
     "jobKey": "0x6210fed712d54e140ae49e3854608b3568ce388bb3268d10c0f63bb19ec45999",
     "status": "COMPLETED",
-    "description": "Pact PR_MERGED eugenennamdi/pact-arc-demo#5"
+    "description": "Pact PR_MERGED eugenennamdi/pact-arc-demo#5",
+    "canonicalSettledAmount": "0"
   },
   "condition": {
     "schemaVersion": 1,
@@ -265,7 +266,7 @@
     "outcome": "COMPLETED",
     "finalJobStatus": 3,
     "bindingAccepted": true,
-    "settledAmount": "1000",
+    "grossSettledAmount": "1000",
     "providerPayout": "1000",
     "treasuryPayout": "0",
     "evaluatorPayout": "0",

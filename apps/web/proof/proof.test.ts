@@ -21,7 +21,7 @@ import {
 } from "./schema";
 
 const TESTNET_ARTIFACT_SHA256 =
-  "c83e09ef92ec06071ba4ac2d94ec3abf037da9153b9517ee2cc0c640865c47a5";
+  "d322fdd53fa6193d68d8ed22e39617d40b24721109b528c2788d3a76230e141f";
 
 const artifactPath = new URL(
   "./artifacts/arc-testnet-job-6.json",
@@ -83,6 +83,8 @@ describe("canonical proof artifacts", () => {
       );
       expect(proof.settlement.treasuryPayout).toBe("0");
       expect(proof.settlement.evaluatorPayout).toBe("0");
+      expect(proof.job.canonicalSettledAmount).toBe("0");
+      expect(proof.settlement.grossSettledAmount).toBe(proof.budget.baseUnits);
     },
   );
 

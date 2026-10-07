@@ -66,6 +66,7 @@ export interface SettlementProofArtifact {
     readonly jobKey: string;
     readonly status: "COMPLETED";
     readonly description: string;
+    readonly canonicalSettledAmount: "0";
   };
   readonly condition: {
     readonly schemaVersion: 1;
@@ -138,7 +139,7 @@ export interface SettlementProofArtifact {
     readonly outcome: "COMPLETED";
     readonly finalJobStatus: 3;
     readonly bindingAccepted: true;
-    readonly settledAmount: string;
+    readonly grossSettledAmount: string;
     readonly providerPayout: string;
     readonly treasuryPayout: "0";
     readonly evaluatorPayout: "0";
