@@ -1,3 +1,5 @@
+import { PRODUCT_WALLET_NETWORK } from "./wallet";
+
 export type WalletRequestKind = "connect" | "sign-in" | "switch-network";
 
 function isCancellation(error: unknown): boolean {
@@ -16,7 +18,7 @@ export function walletErrorMessage(
   request: WalletRequestKind,
 ): string {
   if (error instanceof Error && error.message === "WRONG_NETWORK") {
-    return "Switch to Arc Testnet to continue";
+    return `Switch to ${PRODUCT_WALLET_NETWORK.displayName} to continue`;
   }
   if (
     error instanceof Error &&

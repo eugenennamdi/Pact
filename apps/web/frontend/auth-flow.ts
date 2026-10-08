@@ -1,6 +1,10 @@
 import type { AuthSessionDto } from "../../../packages/product/src/public-contract";
+import {
+  DEFAULT_PRODUCT_NETWORK,
+  type ProductNetworkConfig,
+} from "../../../packages/product/src/network";
 import type { ProductApiClient } from "./product-client";
-import { ARC_TESTNET_CHAIN_ID, type Eip1193Provider } from "./wallet";
+import type { Eip1193Provider } from "./wallet";
 
 export interface BrowserAuthState extends AuthSessionDto {
   readonly expiresAt: number;
@@ -11,13 +15,15 @@ export async function authenticateWallet(input: {
   readonly provider: Eip1193Provider;
   readonly address: `0x${string}`;
   readonly chainId: number;
+  readonly network?: ProductNetworkConfig;
   readonly now?: number;
 }): Promise<BrowserAuthState> {
-  if (input.chainId !== ARC_TESTNET_CHAIN_ID) throw new Error("WRONG_NETWORK");
+  const network = input.network ?? DEFAULT_PRODUCT_NETWORK;
+  if (input.chainId !== network.chainIdNumber) throw new Error("WRONG_NETWORK");
   const challenge = await input.client.challenge(input.address);
   if (
     challenge.walletAddress.toLowerCase() !== input.address.toLowerCase() ||
-    challenge.chainId !== ARC_TESTNET_CHAIN_ID
+    challenge.chainId !== network.chainIdNumber
   ) {
     throw new Error("CHALLENGE_BINDING_MISMATCH");
   }
@@ -44,14 +50,15 @@ export function isBrowserSessionValid(
   session: BrowserAuthState | null,
   walletAddress: string | null,
   chainId: number | null,
+  network: ProductNetworkConfig = DEFAULT_PRODUCT_NETWORK,
   now = Date.now(),
 ): boolean {
   return (
     session !== null &&
     walletAddress !== null &&
     session.walletAddress.toLowerCase() === walletAddress.toLowerCase() &&
-    session.chainId === ARC_TESTNET_CHAIN_ID &&
-    chainId === ARC_TESTNET_CHAIN_ID &&
+    session.chainId === network.chainIdNumber &&
+    chainId === network.chainIdNumber &&
     session.expiresAt > now
   );
 }

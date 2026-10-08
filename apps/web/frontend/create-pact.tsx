@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState, type FormEvent } from "react";
 import type { CreatePactResponseDto } from "../../../packages/product/src/public-contract";
-import { ARC_TESTNET_CHAIN_ID } from "./wallet";
+import { PRODUCT_WALLET_NETWORK } from "./wallet";
 import { ProductApiFailure, createProductApiClient } from "./product-client";
 import { ErrorNotice } from "./error-notice";
 import { useWallet, WalletRequirement } from "./wallet-boundary";
@@ -39,7 +39,7 @@ export function CreatePact() {
     if (
       wallet.address === null ||
       !wallet.authenticated ||
-      wallet.chainId !== ARC_TESTNET_CHAIN_ID
+      wallet.chainId !== PRODUCT_WALLET_NETWORK.chainIdNumber
     ) {
       setError(new Error("AUTH_REQUIRED"));
       return;
@@ -159,7 +159,7 @@ export function CreatePact() {
               disabled={
                 submitting ||
                 !wallet.authenticated ||
-                wallet.chainId !== ARC_TESTNET_CHAIN_ID
+                wallet.chainId !== PRODUCT_WALLET_NETWORK.chainIdNumber
               }
             >
               {submitting ? "Creating draft instruction…" : "Create draft"}

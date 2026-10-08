@@ -9,16 +9,14 @@ import type { PactDatabase } from "@pact/database";
 import { getAddress } from "viem";
 import {
   PRODUCT_BASE_BRANCH,
-  PRODUCT_CHAIN_ID,
-  PRODUCT_COMMERCE_ADDRESS,
   PRODUCT_COMPLETION_OFFSET_SECONDS,
   PRODUCT_COMPLETION_POLICY_VERSION,
   PRODUCT_EVENT,
-  PRODUCT_EVALUATOR_ADDRESS,
   PRODUCT_EXPIRY_OFFSET_SECONDS,
   PRODUCT_EXPIRY_POLICY_VERSION,
-  PRODUCT_NETWORK,
 } from "./constants";
+import { loadCertifiedProductDeployment } from "./deployment";
+import { PERSISTED_PRODUCT_NETWORK } from "./network";
 import type {
   AuthNonce,
   CreateDraftInput,
@@ -58,6 +56,10 @@ interface DraftRow {
   readonly created_at: Date | string;
   readonly updated_at: Date | string;
 }
+
+const PERSISTED_PRODUCT_DEPLOYMENT = loadCertifiedProductDeployment(
+  PERSISTED_PRODUCT_NETWORK,
+);
 
 interface NonceRow {
   readonly id: string;
@@ -124,8 +126,8 @@ function mapDraft(row: DraftRow): PactDraft {
   const conditionHash = hashGithubPrMergedCondition(condition);
   if (
     row.event !== PRODUCT_EVENT ||
-    row.network !== PRODUCT_NETWORK ||
-    BigInt(row.chain_id) !== PRODUCT_CHAIN_ID ||
+    row.network !== PERSISTED_PRODUCT_NETWORK.id ||
+    BigInt(row.chain_id) !== PERSISTED_PRODUCT_NETWORK.chainId ||
     row.condition_hash !== conditionHash
   ) {
     throw new Error("PRODUCT_DRAFT_INTEGRITY_MISMATCH");
@@ -140,8 +142,8 @@ function mapDraft(row: DraftRow): PactDraft {
     baseBranch: condition.baseBranch,
     event: condition.event,
     amountBaseUnits: BigInt(row.amount_base_units),
-    network: PRODUCT_NETWORK,
-    chainId: PRODUCT_CHAIN_ID,
+    network: PERSISTED_PRODUCT_NETWORK.id,
+    chainId: PERSISTED_PRODUCT_NETWORK.chainId,
     condition,
     conditionHash: conditionHash as Hex32,
     completionPolicyVersion: row.completion_policy_version,
@@ -294,8 +296,8 @@ export class PostgresProductRepository implements ProductRepository {
         ${id}, ${slug}, ${input.creatingWallet}, ${input.providerAddress},
         ${input.githubRepository}, ${input.githubPullRequest},
         ${PRODUCT_BASE_BRANCH}, ${PRODUCT_EVENT},
-        ${input.amountBaseUnits.toString()}, ${PRODUCT_NETWORK},
-        ${PRODUCT_CHAIN_ID.toString()}, ${input.conditionHash},
+        ${input.amountBaseUnits.toString()}, ${input.network},
+        ${input.chainId.toString()}, ${input.conditionHash},
         ${PRODUCT_COMPLETION_POLICY_VERSION},
         ${PRODUCT_COMPLETION_OFFSET_SECONDS},
         ${PRODUCT_EXPIRY_POLICY_VERSION}, ${PRODUCT_EXPIRY_OFFSET_SECONDS},
@@ -674,8 +676,8 @@ export class PostgresProductRepository implements ProductRepository {
             jobId: BigInt(row.job_id),
             jobKey: row.job_key,
             chainId: draft.chainId,
-            commerce: getAddress(PRODUCT_COMMERCE_ADDRESS),
-            evaluator: getAddress(PRODUCT_EVALUATOR_ADDRESS),
+            commerce: PERSISTED_PRODUCT_DEPLOYMENT.commerce,
+            evaluator: PERSISTED_PRODUCT_DEPLOYMENT.evaluator,
             transactionHash: row.canonical_tx_hash,
             state: row.relay_state,
             receiptBlockNumber: BigInt(row.receipt_block_number),
@@ -790,8 +792,8 @@ export class InMemoryProductRepository implements ProductRepository {
       baseBranch: PRODUCT_BASE_BRANCH,
       event: PRODUCT_EVENT,
       amountBaseUnits: input.amountBaseUnits,
-      network: PRODUCT_NETWORK,
-      chainId: PRODUCT_CHAIN_ID,
+      network: input.network,
+      chainId: input.chainId,
       condition: input.condition,
       conditionHash: input.conditionHash,
       completionPolicyVersion: PRODUCT_COMPLETION_POLICY_VERSION,

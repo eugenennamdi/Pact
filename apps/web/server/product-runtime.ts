@@ -37,7 +37,10 @@ export function getProductRuntime(): ProductRuntime {
       config.githubToken === undefined ? {} : { token: config.githubToken },
     ),
     rateLimiter: new InMemoryRateLimiter(),
-    chain: createProductChainClient({ rpcUrl: config.arcRpcUrl }),
+    chain: createProductChainClient({
+      rpcUrl: config.arcRpcUrl,
+      network: config.network,
+    }),
     registrar: new ProductCanonicalPactRegistrar(database),
     automation: new PostgresAutomationRepository(database),
   });

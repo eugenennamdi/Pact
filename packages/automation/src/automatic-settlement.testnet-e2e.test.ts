@@ -26,11 +26,8 @@ import {
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { ProductCanonicalPactRegistrar } from "../../product/src/canonical-link";
-import {
-  PRODUCT_CHAIN_ID,
-  PRODUCT_COMMERCE_ADDRESS,
-  PRODUCT_USDC_ADDRESS,
-} from "../../product/src/constants";
+import { loadCertifiedProductDeployment } from "../../product/src/deployment";
+import { ARC_TESTNET_PRODUCT_NETWORK } from "../../product/src/network";
 import {
   handleReadEvidence,
   handleReadPact,
@@ -50,6 +47,13 @@ import { assertTestnetManifest } from "./config";
 import { createRelayWorker } from "./relay-worker";
 import { PostgresAutomationRepository } from "./repository";
 import { createVerifierScheduler } from "./verifier-worker";
+
+const TESTNET_DEPLOYMENT = loadCertifiedProductDeployment(
+  ARC_TESTNET_PRODUCT_NETWORK,
+);
+const TESTNET_CHAIN_ID = ARC_TESTNET_PRODUCT_NETWORK.chainId;
+const TESTNET_COMMERCE_ADDRESS = TESTNET_DEPLOYMENT.commerce;
+const TESTNET_USDC_ADDRESS = TESTNET_DEPLOYMENT.usdc;
 
 const stage = process.env.PACT_PHASE6E_TESTNET_STAGE;
 const describeTestnet = stage === undefined ? describe.skip : describe;
@@ -130,7 +134,11 @@ async function context() {
   const manifest = assertTestnetManifest(
     await loadDeploymentManifest("deployments/arc-testnet.json"),
   );
-  const chain = createProductChainClient({ rpcUrl, timeoutMs: 20_000 });
+  const chain = createProductChainClient({
+    rpcUrl,
+    timeoutMs: 20_000,
+    network: ARC_TESTNET_PRODUCT_NETWORK,
+  });
   for (let attempt = 0; attempt < 4; attempt += 1) {
     try {
       await chain.verifyDeployment();
@@ -203,7 +211,7 @@ async function verifierScheduler(input: Awaited<ReturnType<typeof context>>) {
     github: input.github,
     arc,
     signer: createPactCompletionSigner({ privateKey: input.verifierKey }),
-    configuredChainId: PRODUCT_CHAIN_ID,
+    configuredChainId: TESTNET_CHAIN_ID,
     configuredPactEvaluator: input.manifest.pactEvaluator.address,
     configuredCommerceContract: input.manifest.erc8183.proxy,
   });
@@ -253,7 +261,7 @@ describeTestnet("Phase 6E controlled Arc Testnet automatic settlement", () => {
       try {
         if (stage === "prepare") {
           const chainDefinition = defineChain({
-            id: Number(PRODUCT_CHAIN_ID),
+            id: Number(TESTNET_CHAIN_ID),
             name: "Arc Testnet",
             nativeCurrency: { name: "USDC", symbol: "USDC", decimals: 18 },
             rpcUrls: { default: { http: [input.rpcUrl] } },
@@ -262,7 +270,7 @@ describeTestnet("Phase 6E controlled Arc Testnet automatic settlement", () => {
             chain: chainDefinition,
             transport: http(input.rpcUrl, { retryCount: 1, timeout: 20_000 }),
           });
-          if (BigInt(await publicClient.getChainId()) !== PRODUCT_CHAIN_ID)
+          if (BigInt(await publicClient.getChainId()) !== TESTNET_CHAIN_ID)
             throw new Error("WRONG_CHAIN");
           const wallet = createWalletClient({
             chain: chainDefinition,
@@ -273,6 +281,7 @@ describeTestnet("Phase 6E controlled Arc Testnet automatic settlement", () => {
             github: input.github,
             sessionWallet: input.clientAccount.address,
             idempotencyKey: draftKey,
+            network: ARC_TESTNET_PRODUCT_NETWORK,
             request: {
               repository: repositoryName,
               pullRequest,
@@ -281,6 +290,7 @@ describeTestnet("Phase 6E controlled Arc Testnet automatic settlement", () => {
             },
           });
           const runtime: WalletLifecycleRuntime = {
+            network: ARC_TESTNET_PRODUCT_NETWORK,
             repository: input.repository,
             github: input.github,
             chain: input.chain,
@@ -536,7 +546,7 @@ describeTestnet("Phase 6E controlled Arc Testnet automatic settlement", () => {
             privateKey: input.relayKey,
             verifierAddress: input.manifest.pactEvaluator.verifier,
           }),
-          configuredChainId: PRODUCT_CHAIN_ID,
+          configuredChainId: TESTNET_CHAIN_ID,
           configuredPactEvaluator: input.manifest.pactEvaluator.address,
           configuredCommerceContract: input.manifest.erc8183.proxy,
         });
@@ -609,7 +619,7 @@ describeTestnet("Phase 6E controlled Arc Testnet automatic settlement", () => {
             sessionSecret: `${crypto.randomUUID()}${crypto.randomUUID()}`,
             secureCookie: true,
             sessionTtlSeconds: 900,
-            chainId: Number(PRODUCT_CHAIN_ID),
+            chainId: Number(TESTNET_CHAIN_ID),
             databaseUrl: checkedDatabaseUrl(),
             arcRpcUrl: input.rpcUrl,
           },
@@ -706,7 +716,7 @@ describeTestnet("Phase 6E controlled Arc Testnet automatic settlement", () => {
             abi: [transferEvent],
             logs: receipt.logs.filter(
               (log) =>
-                getAddress(log.address) === getAddress(PRODUCT_USDC_ADDRESS),
+                getAddress(log.address) === getAddress(TESTNET_USDC_ADDRESS),
             ),
             eventName: "Transfer",
             strict: true,
@@ -726,11 +736,11 @@ describeTestnet("Phase 6E controlled Arc Testnet automatic settlement", () => {
         const funding = sum(
           transferLogs(fundReceipt),
           input.clientAccount.address,
-          PRODUCT_COMMERCE_ADDRESS,
+          TESTNET_COMMERCE_ADDRESS,
         );
         const providerPayout = sum(
           transferLogs(settlementReceipt),
-          PRODUCT_COMMERCE_ADDRESS,
+          TESTNET_COMMERCE_ADDRESS,
           input.providerAccount.address,
         );
         const completed = parseEventLogs({

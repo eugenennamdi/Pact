@@ -163,7 +163,17 @@ async function parseStrictJson(
 function requireSession(request: Request, config: ProductConfig) {
   const token = sessionTokenFromCookie(request.headers.get("cookie"));
   if (token === undefined) throw new Error("INVALID_SESSION");
-  return verifySessionToken({ token, secret: config.sessionSecret });
+  return verifySessionToken({
+    token,
+    secret: config.sessionSecret,
+    network: config.network,
+  });
+}
+
+function requireSelfService(config: ProductConfig): void {
+  if (!config.selfServiceEnabled) {
+    throw new ProductError("MAINNET_PRODUCT_MIGRATION_INCOMPLETE", 503);
+  }
 }
 
 export async function handleAuthChallenge(
@@ -172,6 +182,7 @@ export async function handleAuthChallenge(
 ): Promise<Response> {
   try {
     requireOrigin(request, runtime.config);
+    requireSelfService(runtime.config);
     const limited = applyRateLimit(runtime, request, "AUTH_CHALLENGE");
     if (limited !== undefined) return limited;
     const body = await parseStrictJson(request, ["walletAddress"]);
@@ -184,6 +195,7 @@ export async function handleAuthChallenge(
       repository: runtime.repository,
       walletAddress: body.walletAddress,
       publicOrigin: runtime.config.publicOrigin,
+      network: runtime.config.network,
     });
     return json(challenge, 201);
   } catch (error) {
@@ -197,6 +209,7 @@ export async function handleAuthSession(
 ): Promise<Response> {
   try {
     requireOrigin(request, runtime.config);
+    requireSelfService(runtime.config);
     const limited = applyRateLimit(runtime, request, "AUTH_SESSION");
     if (limited !== undefined) return limited;
     const body = await parseStrictJson(request, ["message", "signature"]);
@@ -209,6 +222,7 @@ export async function handleAuthSession(
     const walletAddress = await verifyChallenge({
       repository: runtime.repository,
       publicOrigin: runtime.config.publicOrigin,
+      network: runtime.config.network,
       message: body.message,
       signature: body.signature,
       ...(runtime.recoverAddress === undefined
@@ -218,6 +232,7 @@ export async function handleAuthSession(
     const token = createSessionToken({
       walletAddress,
       secret: runtime.config.sessionSecret,
+      network: runtime.config.network,
       ttlSeconds: runtime.config.sessionTtlSeconds,
     });
     return json(
@@ -259,6 +274,7 @@ export async function handleCreateDraft(
 ): Promise<Response> {
   try {
     requireOrigin(request, runtime.config);
+    requireSelfService(runtime.config);
     const session = requireSession(request, runtime.config);
     const limited = applyRateLimit(
       runtime,
@@ -286,6 +302,7 @@ export async function handleCreateDraft(
       github: runtime.github,
       sessionWallet: session.walletAddress,
       idempotencyKey: request.headers.get("idempotency-key"),
+      network: runtime.config.network,
       request: body as unknown as CreateDraftRequest,
     });
     return json(result, result.replayed ? 200 : 201);
@@ -348,6 +365,7 @@ export async function handlePrepareWalletAction(
 ): Promise<Response> {
   try {
     requireOrigin(request, runtime.config);
+    requireSelfService(runtime.config);
     const session = requireSession(request, runtime.config);
     const limited = applyRateLimit(
       runtime,
@@ -364,6 +382,7 @@ export async function handlePrepareWalletAction(
         github: runtime.github,
         chain: walletRuntime.chain,
         registrar: walletRuntime.registrar,
+        network: runtime.config.network,
         ...(runtime.automation === undefined
           ? {}
           : { automation: runtime.automation }),
@@ -387,6 +406,7 @@ export async function handleConfirmWalletAction(
 ): Promise<Response> {
   try {
     requireOrigin(request, runtime.config);
+    requireSelfService(runtime.config);
     const session = requireSession(request, runtime.config);
     const limited = applyRateLimit(
       runtime,
@@ -406,6 +426,7 @@ export async function handleConfirmWalletAction(
           github: runtime.github,
           chain: walletRuntime.chain,
           registrar: walletRuntime.registrar,
+          network: runtime.config.network,
           ...(runtime.automation === undefined
             ? {}
             : { automation: runtime.automation }),
@@ -428,6 +449,7 @@ export async function handleRetryPact(
 ): Promise<Response> {
   try {
     requireOrigin(request, runtime.config);
+    requireSelfService(runtime.config);
     const session = requireSession(request, runtime.config);
     const limited = applyRateLimit(
       runtime,

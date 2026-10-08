@@ -19,13 +19,16 @@ import {
 } from "viem";
 import type { CanonicalPactRegistrar } from "./canonical-link";
 import {
-  PRODUCT_CHAIN_ID,
   PRODUCT_COMPLETION_OFFSET_SECONDS,
   PRODUCT_EXPIRY_OFFSET_SECONDS,
   PRODUCT_PREPARATION_TTL_SECONDS,
   PRODUCT_PREPARATION_VERSION,
 } from "./constants";
 import { authorizeDraftClient, authorizeDraftProvider } from "./config";
+import {
+  isProductSelfServiceEnabled,
+  type ProductNetworkConfig,
+} from "./network";
 import { ProductError, validateIdempotencyKey } from "./service";
 import type {
   PactDraft,
@@ -144,6 +147,7 @@ export interface ConfirmWalletActionResult {
 }
 
 export interface WalletLifecycleRuntime {
+  readonly network: ProductNetworkConfig;
   readonly repository: ProductRepository;
   readonly github: GitHubPullRequestClient;
   readonly chain: ProductChainClient;
@@ -168,10 +172,13 @@ function equalAddress(left: string, right: string): boolean {
   return getAddress(left) === getAddress(right);
 }
 
-function assertDraftIntegrity(draft: PactDraft): void {
+function assertDraftIntegrity(
+  draft: PactDraft,
+  network: ProductNetworkConfig,
+): void {
   if (
-    draft.chainId !== PRODUCT_CHAIN_ID ||
-    draft.network !== "arc-testnet" ||
+    draft.chainId !== network.chainId ||
+    draft.network !== network.id ||
     draft.event !== "PR_MERGED" ||
     draft.amountBaseUnits <= 0n ||
     draft.completionOffsetSeconds !== PRODUCT_COMPLETION_OFFSET_SECONDS ||
@@ -397,7 +404,7 @@ async function buildCall(input: {
       completionDeadline,
       expiredAt,
       jobId: null,
-      summary: `Create an Arc Testnet Pact job for ${draft.githubRepository}#${draft.githubPullRequest}.`,
+      summary: `Create an ${runtime.network.displayName} Pact job for ${draft.githubRepository}#${draft.githubPullRequest}.`,
     };
   }
 
@@ -554,17 +561,20 @@ export async function prepareWalletAction(input: {
   readonly sessionWallet: string;
   readonly idempotencyKey: string | null;
 }): Promise<PrepareWalletActionResult> {
+  if (!isProductSelfServiceEnabled(input.runtime.network)) {
+    throw new ProductError("MAINNET_PRODUCT_MIGRATION_INCOMPLETE", 503);
+  }
   const action = actionKind(input.actionPath);
   const idempotencyKey = validateIdempotencyKey(input.idempotencyKey);
   const draft = await input.runtime.repository.getDraftBySlug(input.slug);
   if (draft === undefined) throw new ProductError("PACT_NOT_FOUND", 404);
-  assertDraftIntegrity(draft);
+  assertDraftIntegrity(draft, input.runtime.network);
   const signer = requireAuthorizedSigner(draft, action, input.sessionWallet);
   const actions = await loadActionState(input.runtime.repository, draft);
   requireOrder(action, actions);
   await input.runtime.chain.verifyDeployment();
   const context = await input.runtime.chain.readContext();
-  if (context.chainId !== PRODUCT_CHAIN_ID)
+  if (context.chainId !== input.runtime.network.chainId)
     throw new ProductError("WRONG_CHAIN", 409);
   const existingAction = actions.get(action);
   if (
@@ -603,7 +613,7 @@ export async function prepareWalletAction(input: {
       pactRecordId: draft.linkedPactRecordId,
       action,
       requiredSigner: signer,
-      chainId: PRODUCT_CHAIN_ID,
+      chainId: input.runtime.network.chainId,
       expectedTarget: target,
       value: 0n,
       calldataHash: keccak256(
@@ -648,7 +658,7 @@ export async function prepareWalletAction(input: {
     return Object.freeze({
       result: "ALREADY_SATISFIED",
       action: "APPROVE_USDC",
-      chainId: Number(PRODUCT_CHAIN_ID),
+      chainId: input.runtime.network.chainIdNumber,
       requiredSigner: signer,
       exactAllowance: draft.amountBaseUnits.toString(),
       preparedAtBlock: context.blockNumber.toString(),
@@ -667,7 +677,7 @@ export async function prepareWalletAction(input: {
     pactRecordId: draft.linkedPactRecordId,
     action,
     requiredSigner: built.signer,
-    chainId: PRODUCT_CHAIN_ID,
+    chainId: input.runtime.network.chainId,
     expectedTarget: built.target,
     value: built.value,
     calldataHash,
@@ -701,7 +711,7 @@ export async function prepareWalletAction(input: {
     result: "PREPARED",
     replayed: saved.kind === "REPLAY",
     action,
-    chainId: Number(PRODUCT_CHAIN_ID),
+    chainId: input.runtime.network.chainIdNumber,
     requiredSigner: built.signer,
     to: built.target,
     value: built.value.toString(),
@@ -775,13 +785,16 @@ export async function confirmWalletAction(input: {
   readonly sessionWallet: string;
   readonly transactionHash: string;
 }): Promise<ConfirmWalletActionResult> {
+  if (!isProductSelfServiceEnabled(input.runtime.network)) {
+    throw new ProductError("MAINNET_PRODUCT_MIGRATION_INCOMPLETE", 503);
+  }
   const actionKindValue = actionKind(input.actionPath);
   if (!isHash(input.transactionHash))
     throw new ProductError("INVALID_TRANSACTION_HASH", 400);
   const transactionHash = input.transactionHash as Hex32;
   const draft = await input.runtime.repository.getDraftBySlug(input.slug);
   if (draft === undefined) throw new ProductError("PACT_NOT_FOUND", 404);
-  assertDraftIntegrity(draft);
+  assertDraftIntegrity(draft, input.runtime.network);
   requireAuthorizedSigner(draft, actionKindValue, input.sessionWallet);
   const action = await input.runtime.repository.getWalletAction(
     draft.id,
@@ -875,7 +888,7 @@ export async function confirmWalletAction(input: {
     jobId = linked.jobId;
     jobKey = hashPactJobIdentity(
       normalizePactJobIdentity({
-        chainId: PRODUCT_CHAIN_ID,
+        chainId: input.runtime.network.chainId,
         commerceContract: input.runtime.chain.deployment.commerce,
         jobId,
       }),

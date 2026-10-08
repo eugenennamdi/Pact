@@ -15,6 +15,10 @@ import {
   type ProductRuntime,
 } from "./http";
 import { InMemoryRateLimiter } from "./rate-limit";
+import {
+  ARC_MAINNET_PRODUCT_NETWORK,
+  ARC_TESTNET_PRODUCT_NETWORK,
+} from "./network";
 import { InMemoryProductRepository } from "./repository";
 import { createSessionToken, serializeSessionCookie } from "./session";
 import type { ProductRepository } from "./types";
@@ -30,7 +34,9 @@ const config: ProductConfig = {
   sessionSecret: TEST_KEY,
   secureCookie: true,
   sessionTtlSeconds: 900,
+  network: ARC_TESTNET_PRODUCT_NETWORK,
   chainId: 5_042_002,
+  selfServiceEnabled: true,
   databaseUrl: "postgresql://local.invalid/pact",
   arcRpcUrl: "https://rpc.testnet.arc.io",
 };
@@ -88,12 +94,33 @@ function sessionCookie(): string {
     createSessionToken({
       walletAddress: WALLET,
       secret: TEST_KEY,
+      network: ARC_TESTNET_PRODUCT_NETWORK,
     }),
     true,
   );
 }
 
 describe("product HTTP safety and auth", () => {
+  it("blocks Mainnet database-backed auth until the persistence migration", async () => {
+    const response = await handleAuthChallenge(
+      jsonRequest("/api/v1/auth/challenge", { walletAddress: WALLET }),
+      {
+        ...runtime(),
+        config: {
+          ...config,
+          network: ARC_MAINNET_PRODUCT_NETWORK,
+          chainId: ARC_MAINNET_PRODUCT_NETWORK.chainIdNumber,
+          selfServiceEnabled: false,
+          arcRpcUrl: ARC_MAINNET_PRODUCT_NETWORK.defaultPublicRpcUrl,
+        },
+      },
+    );
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toEqual({
+      error: "MAINNET_PRODUCT_MIGRATION_INCOMPLETE",
+    });
+  });
+
   it("issues a bounded wallet challenge", async () => {
     const response = await handleAuthChallenge(
       jsonRequest("/api/v1/auth/challenge", { walletAddress: WALLET }),

@@ -2,7 +2,10 @@ import type {
   PactDto,
   PublicWalletActionPath,
 } from "../../../packages/product/src/public-contract";
-import { ARC_TESTNET_CHAIN_ID } from "./wallet";
+import {
+  DEFAULT_PRODUCT_NETWORK,
+  type ProductNetworkConfig,
+} from "../../../packages/product/src/network";
 
 const actionPaths: Readonly<
   Record<
@@ -40,9 +43,11 @@ export function decidePactAction(input: {
   readonly walletAddress: string | null;
   readonly walletChainId: number | null;
   readonly authenticated: boolean;
+  readonly network?: ProductNetworkConfig;
 }): ActionDecision {
   const { pact } = input;
-  if (pact.chainId !== ARC_TESTNET_CHAIN_ID) return { kind: "TERMINAL" };
+  const network = input.network ?? DEFAULT_PRODUCT_NETWORK;
+  if (pact.chainId !== network.chainIdNumber) return { kind: "TERMINAL" };
   if (
     pact.nextRequiredAction === "VERIFY" ||
     pact.nextRequiredAction === "SETTLE"
@@ -50,7 +55,7 @@ export function decidePactAction(input: {
     return { kind: "AUTOMATED" };
   if (pact.nextRequiredAction === "NONE") return { kind: "TERMINAL" };
   if (input.walletAddress === null) return { kind: "CONNECT" };
-  if (input.walletChainId !== ARC_TESTNET_CHAIN_ID)
+  if (input.walletChainId !== network.chainIdNumber)
     return { kind: "WRONG_NETWORK" };
   const expected =
     pact.nextRequiredActor === "CLIENT" ? pact.client : pact.provider;

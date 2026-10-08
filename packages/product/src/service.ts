@@ -12,16 +12,17 @@ import {
 import { getAddress, keccak256, stringToHex, type Address } from "viem";
 import {
   PRODUCT_BASE_BRANCH,
-  PRODUCT_CHAIN_ID,
-  PRODUCT_CHAIN_ID_NUMBER,
-  PRODUCT_COMMERCE_ADDRESS,
   PRODUCT_COMPLETION_OFFSET_SECONDS,
   PRODUCT_COMPLETION_POLICY_VERSION,
-  PRODUCT_EVALUATOR_ADDRESS,
   PRODUCT_EXPIRY_OFFSET_SECONDS,
   PRODUCT_EXPIRY_POLICY_VERSION,
-  PRODUCT_NETWORK,
 } from "./constants";
+import { loadCertifiedProductDeployment } from "./deployment";
+import {
+  isProductSelfServiceEnabled,
+  type ProductNetworkConfig,
+  type ProductNetworkId,
+} from "./network";
 import { toPublicPactDto, type PublicPactDto } from "./read-model";
 import type { CreateDraftResult, PactDraft, ProductRepository } from "./types";
 
@@ -51,8 +52,8 @@ export interface CreateDraftRequest {
 export interface CreateDraftResponse {
   readonly replayed: boolean;
   readonly publicSlug: string;
-  readonly network: "arc-testnet";
-  readonly chainId: typeof PRODUCT_CHAIN_ID_NUMBER;
+  readonly network: ProductNetworkId;
+  readonly chainId: number;
   readonly repository: string;
   readonly pullRequest: number;
   readonly baseBranch: "main";
@@ -105,6 +106,7 @@ function validatePullRequest(value: number): number {
 }
 
 function requestHash(input: {
+  readonly network: ProductNetworkConfig;
   readonly repository: string;
   readonly pullRequest: number;
   readonly provider: Address;
@@ -117,8 +119,8 @@ function requestHash(input: {
         pullRequest: input.pullRequest,
         provider: input.provider,
         amountBaseUnits: input.amountBaseUnits.toString(),
-        network: PRODUCT_NETWORK,
-        chainId: PRODUCT_CHAIN_ID.toString(),
+        network: input.network.id,
+        chainId: input.network.chainId.toString(),
         baseBranch: PRODUCT_BASE_BRANCH,
         event: PR_MERGED_EVENT,
       }),
@@ -126,16 +128,20 @@ function requestHash(input: {
   ) as Hex32;
 }
 
-function response(result: CreateDraftResult): CreateDraftResponse {
+function response(
+  result: CreateDraftResult,
+  network: ProductNetworkConfig,
+): CreateDraftResponse {
   if (result.kind === "CONFLICT") {
     throw new ProductError("IDEMPOTENCY_CONFLICT", 409);
   }
   const draft = result.draft;
+  const deployment = loadCertifiedProductDeployment(network);
   return Object.freeze({
     replayed: result.kind === "REPLAY",
     publicSlug: draft.publicSlug,
-    network: PRODUCT_NETWORK,
-    chainId: PRODUCT_CHAIN_ID_NUMBER,
+    network: network.id,
+    chainId: network.chainIdNumber,
     repository: draft.githubRepository,
     pullRequest: draft.githubPullRequest,
     baseBranch: PRODUCT_BASE_BRANCH,
@@ -151,8 +157,8 @@ function response(result: CreateDraftResult): CreateDraftResponse {
       expiryVersion: PRODUCT_EXPIRY_POLICY_VERSION,
       expiryOffsetSeconds: PRODUCT_EXPIRY_OFFSET_SECONDS,
     },
-    commerceAddress: PRODUCT_COMMERCE_ADDRESS,
-    evaluatorAddress: PRODUCT_EVALUATOR_ADDRESS,
+    commerceAddress: deployment.commerce,
+    evaluatorAddress: deployment.evaluator,
     draftStatus: draft.lifecycle,
     next: { actor: "CLIENT" as const, action: "CREATE_JOB" as const },
   });
@@ -163,9 +169,13 @@ export async function createDraft(input: {
   readonly github: GitHubPullRequestClient;
   readonly sessionWallet: string;
   readonly idempotencyKey: string | null;
+  readonly network: ProductNetworkConfig;
   readonly request: CreateDraftRequest;
   readonly now?: Date;
 }): Promise<CreateDraftResponse> {
+  if (!isProductSelfServiceEnabled(input.network)) {
+    throw new ProductError("MAINNET_PRODUCT_MIGRATION_INCOMPLETE", 503);
+  }
   const creatingWallet = getAddress(input.sessionWallet);
   let providerAddress: Address;
   try {
@@ -189,6 +199,7 @@ export async function createDraft(input: {
     throw new ProductError("INVALID_REPOSITORY", 400);
   }
   const canonicalRequestHash = requestHash({
+    network: input.network,
     repository: condition.repository,
     pullRequest,
     provider: providerAddress,
@@ -202,7 +213,7 @@ export async function createDraft(input: {
     if (existing.canonicalRequestHash !== canonicalRequestHash) {
       throw new ProductError("IDEMPOTENCY_CONFLICT", 409);
     }
-    return response({ kind: "REPLAY", draft: existing });
+    return response({ kind: "REPLAY", draft: existing }, input.network);
   }
 
   const now = input.now ?? new Date();
@@ -232,6 +243,8 @@ export async function createDraft(input: {
   const conditionHash = hashGithubPrMergedCondition(condition) as Hex32;
   return response(
     await input.repository.createDraft({
+      network: input.network.id,
+      chainId: input.network.chainId,
       creatingWallet,
       providerAddress,
       githubRepository: condition.repository,
@@ -242,6 +255,7 @@ export async function createDraft(input: {
       idempotencyKey,
       canonicalRequestHash,
     }),
+    input.network,
   );
 }
 

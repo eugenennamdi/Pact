@@ -18,7 +18,7 @@ import type {
   CanonicalPactRegistrar,
   CanonicalPactRegistration,
 } from "./canonical-link";
-import { PRODUCT_CHAIN_ID } from "./constants";
+import { ARC_TESTNET_PRODUCT_NETWORK } from "./network";
 import { InMemoryProductRepository } from "./repository";
 import { createDraft, readPublicPact } from "./service";
 import type { PactDraft } from "./types";
@@ -28,6 +28,8 @@ import {
   prepareWalletAction,
   type WalletLifecycleRuntime,
 } from "./wallet-lifecycle";
+
+const TESTNET_CHAIN_ID = ARC_TESTNET_PRODUCT_NETWORK.chainId;
 
 const enabled = process.env.PACT_PRODUCT_TESTNET_E2E === "1";
 const describeTestnet = enabled ? describe : describe.skip;
@@ -106,7 +108,7 @@ describeTestnet("Phase 6D controlled Arc Testnet product E2E", () => {
       if (amount !== "1000") throw new Error("TESTNET_BUDGET_NOT_TINY");
 
       const chainDefinition = defineChain({
-        id: Number(PRODUCT_CHAIN_ID),
+        id: Number(TESTNET_CHAIN_ID),
         name: "Arc Testnet",
         nativeCurrency: { name: "USDC", symbol: "USDC", decimals: 18 },
         rpcUrls: { default: { http: [rpcUrl] } },
@@ -115,7 +117,7 @@ describeTestnet("Phase 6D controlled Arc Testnet product E2E", () => {
         chain: chainDefinition,
         transport: http(rpcUrl, { retryCount: 1, timeout: 20_000 }),
       });
-      if (BigInt(await publicClient.getChainId()) !== PRODUCT_CHAIN_ID)
+      if (BigInt(await publicClient.getChainId()) !== TESTNET_CHAIN_ID)
         throw new Error("WRONG_CHAIN");
       const [clientBalance, providerBalance] = await Promise.all([
         publicClient.getBalance({ address: clientAccount.address }),
@@ -134,7 +136,11 @@ describeTestnet("Phase 6D controlled Arc Testnet product E2E", () => {
         chain: chainDefinition,
         transport: http(rpcUrl, { retryCount: 0, timeout: 20_000 }),
       });
-      const chain = createProductChainClient({ rpcUrl, timeoutMs: 20_000 });
+      const chain = createProductChainClient({
+        rpcUrl,
+        timeoutMs: 20_000,
+        network: ARC_TESTNET_PRODUCT_NETWORK,
+      });
       const github = createGitHubPullRequestClient();
       const repository = new InMemoryProductRepository();
       const created = await createDraft({
@@ -142,6 +148,7 @@ describeTestnet("Phase 6D controlled Arc Testnet product E2E", () => {
         github,
         sessionWallet: clientAccount.address,
         idempotencyKey: `testnet-draft-${pullRequest}`,
+        network: ARC_TESTNET_PRODUCT_NETWORK,
         request: {
           repository: repositoryName,
           pullRequest,
@@ -150,6 +157,7 @@ describeTestnet("Phase 6D controlled Arc Testnet product E2E", () => {
         },
       });
       const runtime: WalletLifecycleRuntime = {
+        network: ARC_TESTNET_PRODUCT_NETWORK,
         repository,
         github,
         chain,

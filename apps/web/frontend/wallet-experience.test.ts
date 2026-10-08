@@ -1,9 +1,9 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { decidePactAction } from "./action-controller";
+import { decidePactAction as decideNetworkPactAction } from "./action-controller";
 import type { PactDto } from "../../../packages/product/src/public-contract";
-import { ARC_TESTNET_CHAIN_ID } from "./wallet";
+import { ARC_TESTNET_PRODUCT_NETWORK } from "../../../packages/product/src/network";
 import {
   safeWalletIcon,
   truncateWalletAddress,
@@ -14,12 +14,22 @@ const CLIENT = "0x1111111111111111111111111111111111111111" as const;
 const PROVIDER = "0x2222222222222222222222222222222222222222" as const;
 const TARGET = "0x3333333333333333333333333333333333333333" as const;
 const HASH = `0x${"ab".repeat(32)}` as const;
+const TESTNET_CHAIN_ID = ARC_TESTNET_PRODUCT_NETWORK.chainIdNumber;
+
+function decidePactAction(
+  input: Omit<Parameters<typeof decideNetworkPactAction>[0], "network">,
+) {
+  return decideNetworkPactAction({
+    ...input,
+    network: ARC_TESTNET_PRODUCT_NETWORK,
+  });
+}
 
 function pact(): PactDto {
   return {
     slug: `pact_${"a".repeat(32)}`,
     network: "arc-testnet",
-    chainId: ARC_TESTNET_CHAIN_ID,
+    chainId: TESTNET_CHAIN_ID,
     client: CLIENT,
     provider: PROVIDER,
     repository: "example/repository",
@@ -59,13 +69,14 @@ describe("standard wallet experience", () => {
     expect(boundary).not.toContain("Signature challenge required");
   });
 
-  it("places the single primary Connect wallet entry point in the header", async () => {
+  it("keeps the public wallet header control disabled", async () => {
     const boundary = await source("frontend/wallet-boundary.tsx");
     const headerControl = boundary.slice(
       boundary.indexOf("export function WalletHeaderControl"),
       boundary.indexOf("export function WalletRequirement"),
     );
-    expect(headerControl.match(/Connect wallet/g)).toHaveLength(1);
+    expect(headerControl).toContain("return null");
+    expect(headerControl).not.toContain("<button");
     expect(await source("app/layout.tsx")).toContain("<WalletHeaderControl />");
   });
 
@@ -107,7 +118,9 @@ describe("standard wallet experience", () => {
     const boundary = await source("frontend/wallet-boundary.tsx");
     expect(boundary).toContain(".writeText(address)");
     expect(boundary).toContain('"Copy address"');
-    expect(boundary).toContain("Switch to Arc Testnet");
+    expect(boundary).toContain(
+      "Switch to {PRODUCT_WALLET_NETWORK.displayName}",
+    );
     expect(boundary).toContain("Sign in to Pact");
     expect(boundary).toContain("Disconnect");
     expect(boundary).toContain("setAccountDialogOpen(false)");
@@ -118,7 +131,7 @@ describe("standard wallet experience", () => {
       decidePactAction({
         pact: pact(),
         walletAddress: CLIENT,
-        walletChainId: ARC_TESTNET_CHAIN_ID,
+        walletChainId: TESTNET_CHAIN_ID,
         authenticated: false,
       }),
     ).toEqual({ kind: "AUTHENTICATE" });
@@ -166,5 +179,11 @@ describe("standard wallet experience", () => {
     expect(proof).not.toContain("WalletRequirement");
     expect(proof).not.toContain("eth_sendTransaction");
     expect(proof).not.toContain("wallet_switchEthereumChain");
+  });
+
+  it("keeps public creation redirected to the canonical Mainnet proof", async () => {
+    const createRoute = await source("app/create/page.tsx");
+    expect(createRoute).toContain('redirect("/proof/arc-mainnet/job/2")');
+    expect(createRoute).not.toContain("CreatePact");
   });
 });

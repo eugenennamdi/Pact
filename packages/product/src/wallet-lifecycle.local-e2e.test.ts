@@ -25,8 +25,8 @@ import type {
   CanonicalPactRegistrar,
   CanonicalPactRegistration,
 } from "./canonical-link";
-import { PRODUCT_CHAIN_ID } from "./constants";
 import { loadCertifiedProductDeployment } from "./deployment";
+import { ARC_TESTNET_PRODUCT_NETWORK } from "./network";
 import { readPublicPact, createDraft } from "./service";
 import { InMemoryProductRepository } from "./repository";
 import type { PactDraft } from "./types";
@@ -50,6 +50,8 @@ import type {
   ProductTransactionEvidence,
   UnsignedCall,
 } from "./wallet-chain";
+
+const TESTNET_CHAIN_ID = ARC_TESTNET_PRODUCT_NETWORK.chainId;
 
 const enabled = process.env.PACT_PRODUCT_LOCAL_E2E === "1";
 const describeLocal = enabled ? describe : describe.skip;
@@ -161,7 +163,7 @@ describeLocal("Phase 6D local product wallet lifecycle E2E", () => {
         "--port",
         String(PORT),
         "--chain-id",
-        PRODUCT_CHAIN_ID.toString(),
+        TESTNET_CHAIN_ID.toString(),
       ],
       { stdio: "ignore" },
     );
@@ -174,7 +176,7 @@ describeLocal("Phase 6D local product wallet lifecycle E2E", () => {
 
   it("uses product prepare and confirm services through Submitted", async () => {
     const chainDefinition = defineChain({
-      id: Number(PRODUCT_CHAIN_ID),
+      id: Number(TESTNET_CHAIN_ID),
       name: "Pact Product Local",
       nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
       rpcUrls: { default: { http: [RPC_URL] } },
@@ -253,7 +255,9 @@ describeLocal("Phase 6D local product wallet lifecycle E2E", () => {
       hash: await wallet.writeContract(allowRequest),
     });
 
-    const certified = loadCertifiedProductDeployment();
+    const certified = loadCertifiedProductDeployment(
+      ARC_TESTNET_PRODUCT_NETWORK,
+    );
     const deployment = {
       ...certified,
       commerce,
@@ -271,7 +275,7 @@ describeLocal("Phase 6D local product wallet lifecycle E2E", () => {
         ]);
         if (block.hash === null) throw new Error("local block missing hash");
         return {
-          chainId: PRODUCT_CHAIN_ID,
+          chainId: TESTNET_CHAIN_ID,
           blockNumber: block.number,
           blockHash: block.hash,
           timestamp: block.timestamp,
@@ -361,7 +365,7 @@ describeLocal("Phase 6D local product wallet lifecycle E2E", () => {
           publicClient.getTransactionReceipt({ hash }),
         ]);
         return {
-          chainId: PRODUCT_CHAIN_ID,
+          chainId: TESTNET_CHAIN_ID,
           hash,
           from: transaction.from,
           to: transaction.to,
@@ -411,6 +415,7 @@ describeLocal("Phase 6D local product wallet lifecycle E2E", () => {
       github,
       sessionWallet: client,
       idempotencyKey: "local-draft-key-01",
+      network: ARC_TESTNET_PRODUCT_NETWORK,
       request: {
         repository: "pact-local/product",
         pullRequest: 1,
@@ -420,6 +425,7 @@ describeLocal("Phase 6D local product wallet lifecycle E2E", () => {
       now: new Date(Number((await publicClient.getBlock()).timestamp) * 1_000),
     });
     const runtime: WalletLifecycleRuntime = {
+      network: ARC_TESTNET_PRODUCT_NETWORK,
       repository,
       github,
       chain,

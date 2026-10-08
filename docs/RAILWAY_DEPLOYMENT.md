@@ -24,6 +24,14 @@ headroom.
 
 `PACT_PUBLIC_ORIGIN` remains an environment setting containing the actual HTTPS
 origin. The same origin serves the web app and `/api/v1/*`; do not broaden CORS.
+`PACT_PRODUCT_ARC_RPC_URL` is the server-only RPC URL for the product network;
+the code-selected production profile is Arc Mainnet (`5042`) and cannot be
+changed to Testnet by an environment selector. During Product Mainnet Migration
+Phase 1, Mainnet deployment reads are available but draft creation and all
+wallet transaction preparation remain fail-closed until the persistence
+migration is certified. `/create` remains redirected to the canonical Mainnet
+proof and the public wallet control remains hidden.
+
 The web service has no signer keys. The verifier has only the verifier key and a
 low-privilege server-side GitHub token. The relay has only the relay key and no
 GitHub token. Both workers remain pinned to the certified Arc Testnet deployment

@@ -9,6 +9,10 @@ import type {
 import { describe, expect, it } from "vitest";
 import { getAddress } from "viem";
 import { InMemoryProductRepository } from "./repository";
+import {
+  ARC_MAINNET_PRODUCT_NETWORK,
+  ARC_TESTNET_PRODUCT_NETWORK,
+} from "./network";
 import { ProductError, createDraft, parseUsdcAmount } from "./service";
 
 const CLIENT = getAddress("0x1111111111111111111111111111111111111111");
@@ -74,12 +78,31 @@ async function create(
     github,
     sessionWallet: CLIENT,
     idempotencyKey: key,
+    network: ARC_TESTNET_PRODUCT_NETWORK,
     request: { ...REQUEST, ...overrides },
     now: NOW,
   });
 }
 
 describe("create draft", () => {
+  it("fails closed before Mainnet persistence is attempted", async () => {
+    const repository = new InMemoryProductRepository();
+    await expect(
+      createDraft({
+        repository,
+        github: githubClient(),
+        sessionWallet: CLIENT,
+        idempotencyKey: "mainnet-blocked-01",
+        network: ARC_MAINNET_PRODUCT_NETWORK,
+        request: REQUEST,
+        now: NOW,
+      }),
+    ).rejects.toMatchObject({
+      code: "MAINNET_PRODUCT_MIGRATION_INCOMPLETE",
+      status: 503,
+    });
+  });
+
   it("creates an Arc Testnet draft only for an open public PR", async () => {
     const result = await create();
     expect(result).toMatchObject({

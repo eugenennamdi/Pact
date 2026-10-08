@@ -1,12 +1,19 @@
 import { getAddress } from "viem";
-import { PRODUCT_CHAIN_ID_NUMBER, SESSION_TTL_SECONDS } from "./constants";
+import { SESSION_TTL_SECONDS } from "./constants";
+import {
+  DEFAULT_PRODUCT_NETWORK,
+  isProductSelfServiceEnabled,
+  type ProductNetworkConfig,
+} from "./network";
 
 export interface ProductConfig {
   readonly publicOrigin: URL;
   readonly sessionSecret: string;
   readonly secureCookie: boolean;
   readonly sessionTtlSeconds: number;
-  readonly chainId: typeof PRODUCT_CHAIN_ID_NUMBER;
+  readonly network: ProductNetworkConfig;
+  readonly chainId: number;
+  readonly selfServiceEnabled: boolean;
   readonly databaseUrl: string;
   readonly arcRpcUrl: string;
   readonly githubToken?: string;
@@ -38,6 +45,7 @@ export function validateSessionSecret(secret: string): string {
 
 export function loadProductConfig(
   environment: Readonly<Record<string, string | undefined>> = process.env,
+  network: ProductNetworkConfig = DEFAULT_PRODUCT_NETWORK,
 ): ProductConfig {
   const publicOrigin = new URL(
     requireString(environment, "PACT_PUBLIC_ORIGIN"),
@@ -63,10 +71,10 @@ export function loadProductConfig(
     requireString(environment, "PACT_SESSION_SECRET"),
   );
   const databaseUrl = requireString(environment, "DATABASE_URL");
-  const arcRpcUrl = requireString(environment, "PACT_PRODUCT_ARC_RPC_URL");
+  const arcRpcUrl = requireString(environment, network.rpcEnvironmentKey);
   const parsedRpcUrl = new URL(arcRpcUrl);
   if (parsedRpcUrl.protocol !== "https:" && parsedRpcUrl.protocol !== "http:")
-    throw new Error("PACT_PRODUCT_ARC_RPC_URL must use HTTP or HTTPS");
+    throw new Error(`${network.rpcEnvironmentKey} must use HTTP or HTTPS`);
   const githubToken = environment.GITHUB_TOKEN;
   if (githubToken !== undefined && githubToken.trim() !== githubToken) {
     throw new Error("GITHUB_TOKEN must not contain surrounding whitespace");
@@ -76,7 +84,9 @@ export function loadProductConfig(
     sessionSecret,
     secureCookie: environment.NODE_ENV === "production",
     sessionTtlSeconds: SESSION_TTL_SECONDS,
-    chainId: PRODUCT_CHAIN_ID_NUMBER,
+    network,
+    chainId: network.chainIdNumber,
+    selfServiceEnabled: isProductSelfServiceEnabled(network),
     databaseUrl,
     arcRpcUrl,
     ...(githubToken === undefined || githubToken.length === 0

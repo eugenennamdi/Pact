@@ -14,14 +14,11 @@ import type {
   CanonicalPactRegistrar,
   CanonicalPactRegistration,
 } from "./canonical-link";
-import {
-  PRODUCT_CHAIN_ID,
-  PRODUCT_COMMERCE_ADDRESS,
-  PRODUCT_EVALUATOR_ADDRESS,
-  PRODUCT_USDC_ADDRESS,
-  PRODUCT_VERIFIER_ADDRESS,
-} from "./constants";
 import { loadCertifiedProductDeployment } from "./deployment";
+import {
+  ARC_MAINNET_PRODUCT_NETWORK,
+  ARC_TESTNET_PRODUCT_NETWORK,
+} from "./network";
 import { InMemoryProductRepository } from "./repository";
 import type { PactDraft, ProductRepository } from "./types";
 import {
@@ -41,13 +38,22 @@ import type {
   UnsignedCall,
 } from "./wallet-chain";
 
+const TESTNET_DEPLOYMENT = loadCertifiedProductDeployment(
+  ARC_TESTNET_PRODUCT_NETWORK,
+);
+const TESTNET_CHAIN_ID = ARC_TESTNET_PRODUCT_NETWORK.chainId;
+const TESTNET_COMMERCE_ADDRESS = TESTNET_DEPLOYMENT.commerce;
+const TESTNET_EVALUATOR_ADDRESS = TESTNET_DEPLOYMENT.evaluator;
+const TESTNET_USDC_ADDRESS = TESTNET_DEPLOYMENT.usdc;
+const TESTNET_VERIFIER_ADDRESS = TESTNET_DEPLOYMENT.verifier;
+
 const CLIENT = getAddress("0x1111111111111111111111111111111111111111");
 const PROVIDER = getAddress("0x2222222222222222222222222222222222222222");
 const OTHER = getAddress("0x3333333333333333333333333333333333333333");
 const JOB_ID = 91n;
 const BLOCK_HASH = `0x${"44".repeat(32)}` as Hex32;
 const CONTEXT: ProductBlockContext = {
-  chainId: PRODUCT_CHAIN_ID,
+  chainId: TESTNET_CHAIN_ID,
   blockNumber: 70_000_000n,
   blockHash: BLOCK_HASH,
   timestamp: 2_000_000_000n,
@@ -81,7 +87,7 @@ function openJob(overrides: Partial<ProductJob> = {}): ProductJob {
     status: 0,
     provider: PROVIDER,
     expiredAt: CONTEXT.timestamp + 21_600n,
-    evaluator: getAddress(PRODUCT_EVALUATOR_ADDRESS),
+    evaluator: getAddress(TESTNET_EVALUATOR_ADDRESS),
     submittedAt: 0n,
     budget: 0n,
     hook: getAddress(ZERO_ADDRESS),
@@ -95,7 +101,7 @@ function openJob(overrides: Partial<ProductJob> = {}): ProductJob {
 }
 
 class FakeChain implements ProductChainClient {
-  readonly deployment = loadCertifiedProductDeployment();
+  readonly deployment = TESTNET_DEPLOYMENT;
   context = { ...CONTEXT };
   job = openJob();
   binding: ProductBinding = {
@@ -205,6 +211,8 @@ async function fixture(): Promise<{
     event: PR_MERGED_EVENT,
   });
   const created = await repository.createDraft({
+    network: ARC_TESTNET_PRODUCT_NETWORK.id,
+    chainId: ARC_TESTNET_PRODUCT_NETWORK.chainId,
     creatingWallet: CLIENT,
     providerAddress: PROVIDER,
     githubRepository: condition.repository,
@@ -219,7 +227,13 @@ async function fixture(): Promise<{
   const chain = new FakeChain();
   const registrar = new FakeRegistrar();
   return {
-    runtime: { repository, github, chain, registrar },
+    runtime: {
+      network: ARC_TESTNET_PRODUCT_NETWORK,
+      repository,
+      github,
+      chain,
+      registrar,
+    },
     repository,
     chain,
     registrar,
@@ -237,7 +251,7 @@ function evidence(
   overrides: Partial<ProductTransactionEvidence> = {},
 ): ProductTransactionEvidence {
   return {
-    chainId: PRODUCT_CHAIN_ID,
+    chainId: TESTNET_CHAIN_ID,
     hash,
     from: plan.requiredSigner,
     to: plan.to,
@@ -325,7 +339,7 @@ async function confirmBind(
     exists: true,
     conditionHash: state.draft.conditionHash,
     completionDeadline: BigInt(plan.deadlines?.completionDeadline ?? "0"),
-    verifier: getAddress(PRODUCT_VERIFIER_ADDRESS),
+    verifier: getAddress(TESTNET_VERIFIER_ADDRESS),
     accepted: false,
   };
   const hash = txHash(2);
@@ -352,7 +366,7 @@ async function confirmBudget(
   state.chain.job = openJob({
     expiredAt: state.chain.job.expiredAt,
     budget: 1_000n,
-    paymentToken: getAddress(PRODUCT_USDC_ADDRESS),
+    paymentToken: getAddress(TESTNET_USDC_ADDRESS),
   });
   const hash = txHash(3);
   state.chain.evidence.set(hash, evidence(hash, plan));
@@ -404,10 +418,29 @@ async function confirmFund(
 }
 
 describe("Phase 6D allowlisted wallet lifecycle", () => {
+  it("blocks Mainnet transaction preparation before repository or chain access", async () => {
+    const state = await fixture();
+    await expect(
+      prepareWalletAction({
+        runtime: {
+          ...state.runtime,
+          network: ARC_MAINNET_PRODUCT_NETWORK,
+        },
+        slug: state.draft.publicSlug,
+        actionPath: "create-job",
+        sessionWallet: CLIENT,
+        idempotencyKey: "mainnet-prepare-blocked-01",
+      }),
+    ).rejects.toMatchObject({
+      code: "MAINNET_PRODUCT_MIGRATION_INCOMPLETE",
+      status: 503,
+    });
+  });
+
   it("prepares and confirms all six actions through Submitted", async () => {
     const state = await fixture();
     const createPlan = await confirmCreate(state);
-    expect(createPlan.to).toBe(getAddress(PRODUCT_COMMERCE_ADDRESS));
+    expect(createPlan.to).toBe(getAddress(TESTNET_COMMERCE_ADDRESS));
     expect(createPlan.value).toBe("0");
     expect(createPlan.deadlines).toEqual({
       completionDeadline: (CONTEXT.timestamp + 7_200n).toString(),
@@ -652,7 +685,7 @@ describe("Phase 6D allowlisted wallet lifecycle", () => {
     ["wrong evaluator", { evaluator: OTHER }],
     ["wrong expiry", { expiredAt: CONTEXT.timestamp + 21_601n }],
     ["premature budget", { budget: 1n }],
-    ["wrong payment token", { paymentToken: getAddress(PRODUCT_USDC_ADDRESS) }],
+    ["wrong payment token", { paymentToken: getAddress(TESTNET_USDC_ADDRESS) }],
     ["wrong hook", { hook: OTHER }],
     ["wrong provider agent", { providerAgentId: 1n }],
     ["wrong description", { description: "tampered" }],
@@ -706,7 +739,7 @@ describe("Phase 6D allowlisted wallet lifecycle", () => {
         completionDeadline: BigInt(
           createPlan.deadlines?.completionDeadline ?? "0",
         ),
-        verifier: getAddress(PRODUCT_VERIFIER_ADDRESS),
+        verifier: getAddress(TESTNET_VERIFIER_ADDRESS),
         accepted: false,
         ...override,
       };
@@ -947,7 +980,7 @@ describe("Phase 6D allowlisted wallet lifecycle", () => {
     expect(result).toMatchObject({
       result: "PREPARED",
       allowancePolicy: "REDUCE_EXCESS_TO_EXACT",
-      to: getAddress(PRODUCT_USDC_ADDRESS),
+      to: getAddress(TESTNET_USDC_ADDRESS),
     });
   });
 
@@ -958,7 +991,7 @@ describe("Phase 6D allowlisted wallet lifecycle", () => {
       exists: true,
       conditionHash: `0x${"99".repeat(32)}`,
       completionDeadline: CONTEXT.timestamp + 7_200n,
-      verifier: getAddress(PRODUCT_VERIFIER_ADDRESS),
+      verifier: getAddress(TESTNET_VERIFIER_ADDRESS),
       accepted: false,
     };
     const fakeBind = await bindState.repository.savePreparedAction({
@@ -966,8 +999,8 @@ describe("Phase 6D allowlisted wallet lifecycle", () => {
       pactRecordId: bindState.draft.id,
       action: "BIND_CONDITION",
       requiredSigner: CLIENT,
-      chainId: PRODUCT_CHAIN_ID,
-      expectedTarget: getAddress(PRODUCT_EVALUATOR_ADDRESS),
+      chainId: TESTNET_CHAIN_ID,
+      expectedTarget: getAddress(TESTNET_EVALUATOR_ADDRESS),
       value: 0n,
       calldataHash: `0x${"88".repeat(32)}`,
       semanticHash: `0x${"77".repeat(32)}`,
@@ -1008,7 +1041,7 @@ describe("Phase 6D allowlisted wallet lifecycle", () => {
     state.chain.job = {
       ...state.chain.job,
       budget: 1_000n,
-      paymentToken: getAddress(PRODUCT_USDC_ADDRESS),
+      paymentToken: getAddress(TESTNET_USDC_ADDRESS),
     };
     await confirmBudget(state);
     state.chain.allowance = 999n;
@@ -1084,8 +1117,8 @@ describe("Phase 6D allowlisted wallet lifecycle", () => {
       draftId: state.draft.id,
       pactRecordId: null,
       requiredSigner: CLIENT,
-      chainId: PRODUCT_CHAIN_ID,
-      expectedTarget: getAddress(PRODUCT_COMMERCE_ADDRESS),
+      chainId: TESTNET_CHAIN_ID,
+      expectedTarget: getAddress(TESTNET_COMMERCE_ADDRESS),
       value: 0n,
       calldataHash: `0x${"aa".repeat(32)}` as Hex32,
       semanticHash: `0x${"bb".repeat(32)}` as Hex32,
@@ -1139,8 +1172,8 @@ describe("Phase 6D allowlisted wallet lifecycle", () => {
       pactRecordId: null,
       action: "CREATE_JOB",
       requiredSigner: CLIENT,
-      chainId: PRODUCT_CHAIN_ID,
-      expectedTarget: getAddress(PRODUCT_COMMERCE_ADDRESS),
+      chainId: TESTNET_CHAIN_ID,
+      expectedTarget: getAddress(TESTNET_COMMERCE_ADDRESS),
       value: 0n,
       calldataHash: `0x${"dd".repeat(32)}`,
       semanticHash: `0x${"ee".repeat(32)}`,

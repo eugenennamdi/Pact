@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { getAddress, type Address } from "viem";
 import { issueChallenge, parseChallengeMessage, verifyChallenge } from "./auth";
+import {
+  ARC_MAINNET_PRODUCT_NETWORK,
+  ARC_TESTNET_PRODUCT_NETWORK,
+} from "./network";
 import { InMemoryProductRepository } from "./repository";
 
 const WALLET = getAddress("0x1111111111111111111111111111111111111111");
@@ -9,14 +13,80 @@ const ORIGIN = new URL("https://pact.example");
 const SIGNATURE = `0x${"11".repeat(65)}`;
 const NOW = new Date("2026-10-03T12:00:00.000Z");
 
+function issueTestnetChallenge(
+  input: Omit<Parameters<typeof issueChallenge>[0], "network">,
+) {
+  return issueChallenge({ ...input, network: ARC_TESTNET_PRODUCT_NETWORK });
+}
+
+function verifyTestnetChallenge(
+  input: Omit<Parameters<typeof verifyChallenge>[0], "network">,
+) {
+  return verifyChallenge({ ...input, network: ARC_TESTNET_PRODUCT_NETWORK });
+}
+
 function recover(address: Address = WALLET) {
   return async () => Promise.resolve(address);
 }
 
 describe("wallet authentication challenges", () => {
-  it("issues and verifies a canonical Arc Testnet challenge", async () => {
+  it("binds the default production profile to Arc Mainnet", async () => {
+    const challenge = await issueChallenge({
+      repository: new InMemoryProductRepository(),
+      walletAddress: WALLET,
+      publicOrigin: ORIGIN,
+      network: ARC_MAINNET_PRODUCT_NETWORK,
+      now: NOW,
+    });
+    expect(challenge.chainId).toBe(5_042);
+    expect(challenge.message).toContain("Chain ID: 5042");
+  });
+
+  it("rejects a Testnet challenge under the Mainnet profile", async () => {
+    const repository = new InMemoryProductRepository();
+    const challenge = await issueTestnetChallenge({
+      repository,
+      walletAddress: WALLET,
+      publicOrigin: ORIGIN,
+      now: NOW,
+    });
+    await expect(
+      verifyChallenge({
+        repository,
+        publicOrigin: ORIGIN,
+        network: ARC_MAINNET_PRODUCT_NETWORK,
+        message: challenge.message,
+        signature: SIGNATURE,
+        now: new Date(NOW.getTime() + 1_000),
+        recoverAddress: recover(),
+      }),
+    ).rejects.toThrow("CHALLENGE_BINDING_MISMATCH");
+  });
+
+  it("rejects a Mainnet challenge under the Testnet profile", async () => {
     const repository = new InMemoryProductRepository();
     const challenge = await issueChallenge({
+      repository,
+      walletAddress: WALLET,
+      publicOrigin: ORIGIN,
+      network: ARC_MAINNET_PRODUCT_NETWORK,
+      now: NOW,
+    });
+    await expect(
+      verifyTestnetChallenge({
+        repository,
+        publicOrigin: ORIGIN,
+        message: challenge.message,
+        signature: SIGNATURE,
+        now: new Date(NOW.getTime() + 1_000),
+        recoverAddress: recover(),
+      }),
+    ).rejects.toThrow("CHALLENGE_BINDING_MISMATCH");
+  });
+
+  it("issues and verifies a canonical Arc Testnet challenge", async () => {
+    const repository = new InMemoryProductRepository();
+    const challenge = await issueTestnetChallenge({
       repository,
       walletAddress: WALLET,
       publicOrigin: ORIGIN,
@@ -28,7 +98,7 @@ describe("wallet authentication challenges", () => {
       challenge.nonce,
     );
     await expect(
-      verifyChallenge({
+      verifyTestnetChallenge({
         repository,
         publicOrigin: ORIGIN,
         message: challenge.message,
@@ -41,7 +111,7 @@ describe("wallet authentication challenges", () => {
 
   it("rejects an invalid wallet", async () => {
     await expect(
-      issueChallenge({
+      issueTestnetChallenge({
         repository: new InMemoryProductRepository(),
         walletAddress: "not-an-address",
         publicOrigin: ORIGIN,
@@ -52,14 +122,14 @@ describe("wallet authentication challenges", () => {
 
   it("rejects an expired challenge", async () => {
     const repository = new InMemoryProductRepository();
-    const challenge = await issueChallenge({
+    const challenge = await issueTestnetChallenge({
       repository,
       walletAddress: WALLET,
       publicOrigin: ORIGIN,
       now: NOW,
     });
     await expect(
-      verifyChallenge({
+      verifyTestnetChallenge({
         repository,
         publicOrigin: ORIGIN,
         message: challenge.message,
@@ -81,14 +151,14 @@ describe("wallet authentication challenges", () => {
     ["tampered statement", "Sign in to Pact", "Authorize funds in Pact"],
   ])("rejects %s binding", async (_label, original, replacement) => {
     const repository = new InMemoryProductRepository();
-    const challenge = await issueChallenge({
+    const challenge = await issueTestnetChallenge({
       repository,
       walletAddress: WALLET,
       publicOrigin: ORIGIN,
       now: NOW,
     });
     await expect(
-      verifyChallenge({
+      verifyTestnetChallenge({
         repository,
         publicOrigin: ORIGIN,
         message: challenge.message.replace(original, replacement),
@@ -101,14 +171,14 @@ describe("wallet authentication challenges", () => {
 
   it("rejects a signature recovered to a different wallet", async () => {
     const repository = new InMemoryProductRepository();
-    const challenge = await issueChallenge({
+    const challenge = await issueTestnetChallenge({
       repository,
       walletAddress: WALLET,
       publicOrigin: ORIGIN,
       now: NOW,
     });
     await expect(
-      verifyChallenge({
+      verifyTestnetChallenge({
         repository,
         publicOrigin: ORIGIN,
         message: challenge.message,
@@ -121,14 +191,14 @@ describe("wallet authentication challenges", () => {
 
   it("rejects replay and permits only one concurrent nonce consumer", async () => {
     const repository = new InMemoryProductRepository();
-    const challenge = await issueChallenge({
+    const challenge = await issueTestnetChallenge({
       repository,
       walletAddress: WALLET,
       publicOrigin: ORIGIN,
       now: NOW,
     });
     const attempt = () =>
-      verifyChallenge({
+      verifyTestnetChallenge({
         repository,
         publicOrigin: ORIGIN,
         message: challenge.message,
@@ -148,20 +218,20 @@ describe("wallet authentication challenges", () => {
 
   it("invalidates the previous active challenge for a wallet/domain", async () => {
     const repository = new InMemoryProductRepository();
-    const first = await issueChallenge({
+    const first = await issueTestnetChallenge({
       repository,
       walletAddress: WALLET,
       publicOrigin: ORIGIN,
       now: NOW,
     });
-    await issueChallenge({
+    await issueTestnetChallenge({
       repository,
       walletAddress: WALLET,
       publicOrigin: ORIGIN,
       now: new Date(NOW.getTime() + 1_000),
     });
     await expect(
-      verifyChallenge({
+      verifyTestnetChallenge({
         repository,
         publicOrigin: ORIGIN,
         message: first.message,

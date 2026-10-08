@@ -15,7 +15,7 @@ export type AuthChallengeDto = Challenge;
 
 export interface AuthSessionDto {
   readonly walletAddress: `0x${string}`;
-  readonly chainId: 5_042_002;
+  readonly chainId: number;
   readonly expiresInSeconds: number;
 }
 

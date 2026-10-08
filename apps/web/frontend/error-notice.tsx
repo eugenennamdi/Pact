@@ -1,10 +1,11 @@
 import { ProductApiFailure } from "./product-client";
+import { PRODUCT_WALLET_NETWORK } from "./wallet";
 
 const messages: Readonly<Record<string, string>> = {
   AUTH_REQUIRED:
     "Your session has expired. Sign in with the connected wallet again.",
   WRONG_WALLET: "The connected wallet is not authorized for this action.",
-  WRONG_NETWORK: "Switch the wallet to Arc Testnet before continuing.",
+  WRONG_NETWORK: `Switch the wallet to ${PRODUCT_WALLET_NETWORK.displayName} before continuing.`,
   ACTION_NOT_READY: "This action is not ready in the canonical Pact state.",
   AWAITING_CONDITION: "The verified outcome is not available yet.",
   INSUFFICIENT_BALANCE: "The required balance is not available.",
@@ -19,8 +20,7 @@ const messages: Readonly<Record<string, string>> = {
     "The prepared action requires a different wallet. No transaction was sent.",
   SESSION_WALLET_MISMATCH:
     "The authenticated session does not match the connected wallet.",
-  PREPARE_WRONG_NETWORK:
-    "The prepared action is not for Arc Testnet. No transaction was sent.",
+  PREPARE_WRONG_NETWORK: `The prepared action is not for ${PRODUCT_WALLET_NETWORK.displayName}. No transaction was sent.`,
   SIGNATURE_REJECTED: "Sign-in cancelled.",
   WALLET_ACCOUNT_UNAVAILABLE: "The wallet did not return an account.",
   WALLET_PROVIDER_UNAVAILABLE: "Wallet is no longer available.",

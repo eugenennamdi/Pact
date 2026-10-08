@@ -5,24 +5,65 @@ import type {
   PactDto,
   PrepareActionDto,
 } from "../../../packages/product/src/public-contract";
-import { decidePactAction } from "./action-controller";
-import { authenticateWallet, isBrowserSessionValid } from "./auth-flow";
+import { ARC_TESTNET_PRODUCT_NETWORK } from "../../../packages/product/src/network";
+import { decidePactAction as decideNetworkPactAction } from "./action-controller";
+import {
+  authenticateWallet as authenticateNetworkWallet,
+  isBrowserSessionValid,
+} from "./auth-flow";
 import {
   createProductApiClient,
   publicWalletActionPaths,
 } from "./product-client";
 import {
-  prepareActionForWallet,
-  sendPreparedTransaction,
+  prepareActionForWallet as prepareNetworkActionForWallet,
+  sendPreparedTransaction as sendNetworkPreparedTransaction,
 } from "./wallet-action";
 import {
-  ARC_TESTNET_CHAIN_ID,
   WalletDiscovery,
   connectWallet,
   type Eip1193Provider,
   type Eip1193RequestArguments,
   type WalletProviderInfo,
 } from "./wallet";
+
+const TESTNET_CHAIN_ID = ARC_TESTNET_PRODUCT_NETWORK.chainIdNumber;
+
+function decidePactAction(
+  input: Omit<Parameters<typeof decideNetworkPactAction>[0], "network">,
+) {
+  return decideNetworkPactAction({
+    ...input,
+    network: ARC_TESTNET_PRODUCT_NETWORK,
+  });
+}
+
+function authenticateWallet(
+  input: Omit<Parameters<typeof authenticateNetworkWallet>[0], "network">,
+) {
+  return authenticateNetworkWallet({
+    ...input,
+    network: ARC_TESTNET_PRODUCT_NETWORK,
+  });
+}
+
+function prepareActionForWallet(
+  input: Omit<Parameters<typeof prepareNetworkActionForWallet>[0], "network">,
+) {
+  return prepareNetworkActionForWallet({
+    ...input,
+    network: ARC_TESTNET_PRODUCT_NETWORK,
+  });
+}
+
+function sendPreparedTransaction(
+  input: Omit<Parameters<typeof sendNetworkPreparedTransaction>[0], "network">,
+) {
+  return sendNetworkPreparedTransaction({
+    ...input,
+    network: ARC_TESTNET_PRODUCT_NETWORK,
+  });
+}
 
 const CLIENT = "0x1111111111111111111111111111111111111111" as const;
 const PROVIDER = "0x2222222222222222222222222222222222222222" as const;
@@ -74,7 +115,7 @@ const prepared: PrepareActionDto = {
   result: "PREPARED",
   replayed: false,
   action: "CREATE_JOB",
-  chainId: ARC_TESTNET_CHAIN_ID,
+  chainId: TESTNET_CHAIN_ID,
   requiredSigner: CLIENT,
   to: TARGET,
   value: "15",
@@ -102,7 +143,7 @@ function pact(overrides: Partial<PactDto> = {}): PactDto {
   return {
     slug: `pact_${"a".repeat(32)}`,
     network: "arc-testnet",
-    chainId: ARC_TESTNET_CHAIN_ID,
+    chainId: TESTNET_CHAIN_ID,
     client: CLIENT,
     provider: PROVIDER,
     repository: "example/repository",
@@ -191,12 +232,18 @@ describe("browser wallet security boundary", () => {
   it("invalidates authenticated UI state when the wallet account changes", () => {
     const session = {
       walletAddress: CLIENT,
-      chainId: ARC_TESTNET_CHAIN_ID,
+      chainId: TESTNET_CHAIN_ID,
       expiresInSeconds: 900,
       expiresAt: 10_000,
     } as const;
     expect(
-      isBrowserSessionValid(session, PROVIDER, ARC_TESTNET_CHAIN_ID, 1),
+      isBrowserSessionValid(
+        session,
+        PROVIDER,
+        TESTNET_CHAIN_ID,
+        ARC_TESTNET_PRODUCT_NETWORK,
+        1,
+      ),
     ).toBe(false);
   });
 
@@ -208,7 +255,7 @@ describe("browser wallet security boundary", () => {
     );
     const createSession = vi.fn(async () => ({
       walletAddress: CLIENT,
-      chainId: ARC_TESTNET_CHAIN_ID as 5_042_002,
+      chainId: TESTNET_CHAIN_ID as 5_042_002,
       expiresInSeconds: 900,
     }));
     await authenticateWallet({
@@ -218,7 +265,7 @@ describe("browser wallet security boundary", () => {
           walletAddress: CLIENT,
           domain: "localhost",
           uri: "http://localhost",
-          chainId: ARC_TESTNET_CHAIN_ID,
+          chainId: TESTNET_CHAIN_ID,
           nonce: "abcdefghijklmnopqrstuvwx",
           issuedAt: "2026-10-04T00:00:00.000Z",
           expirationTime: "2026-10-04T00:05:00.000Z",
@@ -227,7 +274,7 @@ describe("browser wallet security boundary", () => {
       },
       provider,
       address: CLIENT,
-      chainId: ARC_TESTNET_CHAIN_ID,
+      chainId: TESTNET_CHAIN_ID,
       now: 1,
     });
     expect(provider.calls[0]).toEqual({
@@ -250,7 +297,7 @@ describe("browser wallet security boundary", () => {
             walletAddress: CLIENT,
             domain: "localhost",
             uri: "http://localhost",
-            chainId: ARC_TESTNET_CHAIN_ID,
+            chainId: TESTNET_CHAIN_ID,
             nonce: "abcdefghijklmnopqrstuvwx",
             issuedAt: "2026-10-04T00:00:00.000Z",
             expirationTime: "2026-10-04T00:05:00.000Z",
@@ -259,7 +306,7 @@ describe("browser wallet security boundary", () => {
         },
         provider,
         address: CLIENT,
-        chainId: ARC_TESTNET_CHAIN_ID,
+        chainId: TESTNET_CHAIN_ID,
       }),
     ).rejects.toThrow("user rejected request");
     expect(createSession).not.toHaveBeenCalled();
@@ -268,12 +315,18 @@ describe("browser wallet security boundary", () => {
   it("requires re-authentication when the in-memory session expires", () => {
     const session = {
       walletAddress: CLIENT,
-      chainId: ARC_TESTNET_CHAIN_ID,
+      chainId: TESTNET_CHAIN_ID,
       expiresInSeconds: 1,
       expiresAt: 100,
     } as const;
     expect(
-      isBrowserSessionValid(session, CLIENT, ARC_TESTNET_CHAIN_ID, 100),
+      isBrowserSessionValid(
+        session,
+        CLIENT,
+        TESTNET_CHAIN_ID,
+        ARC_TESTNET_PRODUCT_NETWORK,
+        100,
+      ),
     ).toBe(false);
   });
 
@@ -285,7 +338,7 @@ describe("browser wallet security boundary", () => {
         action: "create-job",
         idempotencyKey: "prepare:test-2",
         walletAddress: PROVIDER,
-        walletChainId: ARC_TESTNET_CHAIN_ID,
+        walletChainId: TESTNET_CHAIN_ID,
       }),
     ).rejects.toThrow("PREPARE_SIGNER_MISMATCH");
   });
@@ -300,7 +353,7 @@ describe("browser wallet security boundary", () => {
         action: "create-job",
         idempotencyKey: "prepare:test-3",
         walletAddress: CLIENT,
-        walletChainId: ARC_TESTNET_CHAIN_ID,
+        walletChainId: TESTNET_CHAIN_ID,
       }),
     ).rejects.toThrow("PREPARE_WRONG_NETWORK");
   });
@@ -335,7 +388,7 @@ describe("browser wallet security boundary", () => {
       action: "create-job",
       idempotencyKey: "prepare:test-4",
       walletAddress: CLIENT,
-      walletChainId: ARC_TESTNET_CHAIN_ID,
+      walletChainId: TESTNET_CHAIN_ID,
     });
     expect(provider.calls).toEqual([]);
   });
@@ -386,7 +439,7 @@ describe("browser wallet security boundary", () => {
       decidePactAction({
         pact: pact(),
         walletAddress: PROVIDER,
-        walletChainId: ARC_TESTNET_CHAIN_ID,
+        walletChainId: TESTNET_CHAIN_ID,
         authenticated: true,
       }),
     ).toEqual({ kind: "WAITING_FOR_CLIENT" });
@@ -433,7 +486,7 @@ describe("browser wallet security boundary", () => {
             nextRequiredAction: action,
           }),
           walletAddress,
-          walletChainId: ARC_TESTNET_CHAIN_ID,
+          walletChainId: TESTNET_CHAIN_ID,
           authenticated: true,
         }),
       ).toEqual({ kind: expected });
@@ -449,7 +502,7 @@ describe("browser wallet security boundary", () => {
           nextRequiredAction: "BIND_CONDITION",
         }),
         walletAddress: CLIENT,
-        walletChainId: ARC_TESTNET_CHAIN_ID,
+        walletChainId: TESTNET_CHAIN_ID,
         authenticated: true,
       }),
     ).toEqual({
@@ -470,7 +523,7 @@ describe("browser wallet security boundary", () => {
             nextRequiredAction: action as never,
           }),
           walletAddress: CLIENT,
-          walletChainId: ARC_TESTNET_CHAIN_ID,
+          walletChainId: TESTNET_CHAIN_ID,
           authenticated: true,
         }),
       ).toEqual({ kind: "TERMINAL" });

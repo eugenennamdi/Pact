@@ -8,6 +8,10 @@ import type {
   PublicWalletActionPath,
   SettlementDto,
 } from "../../../packages/product/src/public-contract";
+import {
+  DEFAULT_PRODUCT_NETWORK,
+  getProductNetworkByChainId,
+} from "../../../packages/product/src/network";
 import { decidePactAction, mayRetryVerification } from "./action-controller";
 import {
   COMPLETION_DEADLINE_POLICY,
@@ -90,11 +94,14 @@ function WalletActionPanel({
   readonly refresh: () => Promise<void>;
 }) {
   const wallet = useWallet();
+  const productNetwork =
+    getProductNetworkByChainId(pact.chainId) ?? DEFAULT_PRODUCT_NETWORK;
   const decision = decidePactAction({
     pact,
     walletAddress: wallet.address,
     walletChainId: wallet.chainId,
     authenticated: wallet.authenticated,
+    network: productNetwork,
   });
   const [prepared, setPrepared] = useState<PrepareActionDto | null>(null);
   const [preparedAction, setPreparedAction] =
@@ -131,6 +138,7 @@ function WalletActionPanel({
         idempotencyKey: `prepare:${crypto.randomUUID()}`,
         walletAddress: wallet.address,
         walletChainId: wallet.chainId,
+        network: productNetwork,
       });
       if (result.result === "ALREADY_SATISFIED") {
         setNotice(result.summary);
@@ -192,6 +200,7 @@ function WalletActionPanel({
         provider: wallet.provider,
         walletAddress: wallet.address,
         prepared,
+        network: productNetwork,
       });
       setTransactionHash(hash);
       setBusy(false);
@@ -250,7 +259,7 @@ function WalletActionPanel({
               Signer: <code>{wallet.address}</code> (
               {pact.nextRequiredActor === "CLIENT" ? "Client" : "Provider"}).
               Preparing this action computes the deterministic transaction
-              payload on Arc Testnet.
+              payload on {productNetwork.displayName}.
             </p>
           </div>
 
@@ -316,8 +325,8 @@ function WalletActionPanel({
         <div className="error stack" style={{ margin: 0, gap: "0.9rem" }}>
           <h3 style={{ margin: "0 0 0.35rem 0" }}>Wrong network</h3>
           <p style={{ margin: 0 }}>
-            Pact requires Arc Testnet (Chain ID 5042002). Switch networks to
-            continue.
+            Pact requires {productNetwork.displayName} (Chain ID {pact.chainId}
+            ). Switch networks to continue.
           </p>
           <div className="actions" style={{ margin: 0 }}>
             <button
@@ -325,7 +334,7 @@ function WalletActionPanel({
               onClick={() => void wallet.switchNetwork()}
               disabled={wallet.busy}
             >
-              Switch to Arc Testnet
+              Switch to {productNetwork.displayName}
             </button>
           </div>
         </div>
@@ -494,7 +503,7 @@ function WalletActionPanel({
             <div className="review-fact-item">
               <div className="review-fact-label">Network</div>
               <div className="review-fact-value">
-                Arc Testnet ({prepared.chainId})
+                {productNetwork.displayName} ({prepared.chainId})
               </div>
             </div>
             <div className="review-fact-item">

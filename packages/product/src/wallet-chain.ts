@@ -6,12 +6,12 @@ import {
   type Address,
   type Hex,
 } from "viem";
-import { PRODUCT_CHAIN_ID } from "./constants";
 import {
   loadCertifiedProductDeployment,
   verifyCertifiedProductDeployment,
   type ProductDeployment,
 } from "./deployment";
+import { DEFAULT_PRODUCT_NETWORK, type ProductNetworkConfig } from "./network";
 import {
   productErc8183Abi,
   productEvaluatorAbi,
@@ -147,9 +147,11 @@ function isNotFound(error: unknown): boolean {
 
 export function createProductChainClient(input: {
   readonly rpcUrl: string;
+  readonly network?: ProductNetworkConfig;
   readonly timeoutMs?: number;
 }): ProductChainClient {
-  const deployment = loadCertifiedProductDeployment();
+  const network = input.network ?? DEFAULT_PRODUCT_NETWORK;
+  const deployment = loadCertifiedProductDeployment(network);
   const client = createPublicClient({
     transport: http(input.rpcUrl, {
       retryCount: 0,
@@ -159,7 +161,7 @@ export function createProductChainClient(input: {
   return Object.freeze({
     deployment,
     async verifyDeployment(): Promise<void> {
-      await verifyCertifiedProductDeployment(input.rpcUrl);
+      await verifyCertifiedProductDeployment(input.rpcUrl, network);
     },
     async readContext(): Promise<ProductBlockContext> {
       const [chainId, block, gasPrice] = await Promise.all([
@@ -167,7 +169,7 @@ export function createProductChainClient(input: {
         client.getBlock({ blockTag: "latest" }),
         client.getGasPrice(),
       ]);
-      if (BigInt(chainId) !== PRODUCT_CHAIN_ID) throw new Error("WRONG_CHAIN");
+      if (BigInt(chainId) !== network.chainId) throw new Error("WRONG_CHAIN");
       if (block.hash === null) throw new Error("ARC_BLOCK_NOT_CANONICAL");
       return Object.freeze({
         chainId: BigInt(chainId),
@@ -298,7 +300,7 @@ export function createProductChainClient(input: {
         throw error;
       }
       const chainId = BigInt(await client.getChainId());
-      if (chainId !== PRODUCT_CHAIN_ID) throw new Error("WRONG_CHAIN");
+      if (chainId !== network.chainId) throw new Error("WRONG_CHAIN");
       if (receipt.blockHash === null)
         throw new Error("ARC_RECEIPT_NOT_CANONICAL");
       const canonicalBlock = await client.getBlock({

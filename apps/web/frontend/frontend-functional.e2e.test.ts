@@ -7,19 +7,21 @@ import type {
   PublicWalletActionPath,
   SettlementDto,
 } from "../../../packages/product/src/public-contract";
-import { authenticateWallet } from "./auth-flow";
+import { ARC_TESTNET_PRODUCT_NETWORK } from "../../../packages/product/src/network";
+import { authenticateWallet as authenticateNetworkWallet } from "./auth-flow";
 import { createProductApiClient } from "./product-client";
 import {
   confirmWalletTransaction,
-  prepareActionForWallet,
-  sendPreparedTransaction,
+  prepareActionForWallet as prepareNetworkActionForWallet,
+  sendPreparedTransaction as sendNetworkPreparedTransaction,
 } from "./wallet-action";
 import {
-  ARC_TESTNET_CHAIN_ID,
   connectWallet,
   type Eip1193Provider,
   type Eip1193RequestArguments,
 } from "./wallet";
+
+const TESTNET_CHAIN_ID = ARC_TESTNET_PRODUCT_NETWORK.chainIdNumber;
 
 const CLIENT = "0x1111111111111111111111111111111111111111" as const;
 const PROVIDER = "0x2222222222222222222222222222222222222222" as const;
@@ -27,6 +29,33 @@ const COMMERCE = "0x3333333333333333333333333333333333333333" as const;
 const EVALUATOR = "0x4444444444444444444444444444444444444444" as const;
 const HASH = `0x${"ab".repeat(32)}` as const;
 const SLUG = `pact_${"a".repeat(32)}`;
+
+function authenticateWallet(
+  input: Omit<Parameters<typeof authenticateNetworkWallet>[0], "network">,
+) {
+  return authenticateNetworkWallet({
+    ...input,
+    network: ARC_TESTNET_PRODUCT_NETWORK,
+  });
+}
+
+function prepareActionForWallet(
+  input: Omit<Parameters<typeof prepareNetworkActionForWallet>[0], "network">,
+) {
+  return prepareNetworkActionForWallet({
+    ...input,
+    network: ARC_TESTNET_PRODUCT_NETWORK,
+  });
+}
+
+function sendPreparedTransaction(
+  input: Omit<Parameters<typeof sendNetworkPreparedTransaction>[0], "network">,
+) {
+  return sendNetworkPreparedTransaction({
+    ...input,
+    network: ARC_TESTNET_PRODUCT_NETWORK,
+  });
+}
 const actions = [
   "create-job",
   "bind-condition",
@@ -79,7 +108,7 @@ function pact(status: PactDto["status"]): PactDto {
   return {
     slug: SLUG,
     network: "arc-testnet",
-    chainId: ARC_TESTNET_CHAIN_ID,
+    chainId: TESTNET_CHAIN_ID,
     client: CLIENT,
     provider: PROVIDER,
     repository: "example/repository",
@@ -133,7 +162,7 @@ const evidence: EvidenceDto = {
 const settlement: SettlementDto = {
   jobId: "1",
   jobKey: HASH,
-  chainId: ARC_TESTNET_CHAIN_ID,
+  chainId: TESTNET_CHAIN_ID,
   commerce: COMMERCE,
   evaluator: EVALUATOR,
   transactionHash: `0x${"78".repeat(32)}`,
@@ -178,7 +207,7 @@ describe("frontend functional product integration", () => {
           walletAddress: body.walletAddress,
           domain: "localhost",
           uri: "http://localhost",
-          chainId: ARC_TESTNET_CHAIN_ID,
+          chainId: TESTNET_CHAIN_ID,
           nonce: "abcdefghijklmnopqrstuvwx",
           issuedAt: "2026-10-04T00:00:00.000Z",
           expirationTime: "2026-10-04T00:05:00.000Z",
@@ -191,7 +220,7 @@ describe("frontend functional product integration", () => {
         const walletAddress = body.message.endsWith(CLIENT) ? CLIENT : PROVIDER;
         return Response.json({
           walletAddress,
-          chainId: ARC_TESTNET_CHAIN_ID,
+          chainId: TESTNET_CHAIN_ID,
           expiresInSeconds: 900,
         });
       }
@@ -200,7 +229,7 @@ describe("frontend functional product integration", () => {
           replayed: false,
           publicSlug: SLUG,
           network: "arc-testnet",
-          chainId: ARC_TESTNET_CHAIN_ID,
+          chainId: TESTNET_CHAIN_ID,
           repository: "example/repository",
           pullRequest: 7,
           baseBranch: "main",
@@ -238,7 +267,7 @@ describe("frontend functional product integration", () => {
           result: "PREPARED",
           replayed: false,
           action: kinds[actions.indexOf(action)] ?? "CREATE_JOB",
-          chainId: ARC_TESTNET_CHAIN_ID,
+          chainId: TESTNET_CHAIN_ID,
           requiredSigner: signer(action),
           to: COMMERCE,
           value: "0",
@@ -303,7 +332,7 @@ describe("frontend functional product integration", () => {
     const clientConnection = await connectWallet(clientWallet);
     expect(clientConnection).toEqual({
       address: CLIENT,
-      chainId: ARC_TESTNET_CHAIN_ID,
+      chainId: TESTNET_CHAIN_ID,
     });
     expect(clientWallet.calls.map((call) => call.method)).toEqual([
       "eth_requestAccounts",

@@ -3,8 +3,9 @@ import type {
   PrepareActionDto,
   PublicWalletActionPath,
 } from "../../../packages/product/src/public-contract";
+import type { ProductNetworkConfig } from "../../../packages/product/src/network";
 import type { ProductApiClient } from "./product-client";
-import { ARC_TESTNET_CHAIN_ID, type Eip1193Provider } from "./wallet";
+import { PRODUCT_WALLET_NETWORK, type Eip1193Provider } from "./wallet";
 
 function sameAddress(left: string, right: string): boolean {
   return left.toLowerCase() === right.toLowerCase();
@@ -17,15 +18,17 @@ export async function prepareActionForWallet(input: {
   readonly idempotencyKey: string;
   readonly walletAddress: `0x${string}`;
   readonly walletChainId: number;
+  readonly network?: ProductNetworkConfig;
 }): Promise<PrepareActionDto> {
-  if (input.walletChainId !== ARC_TESTNET_CHAIN_ID)
+  const network = input.network ?? PRODUCT_WALLET_NETWORK;
+  if (input.walletChainId !== network.chainIdNumber)
     throw new Error("WRONG_NETWORK");
   const prepared = await input.client.prepareAction(
     input.slug,
     input.action,
     input.idempotencyKey,
   );
-  if (prepared.chainId !== ARC_TESTNET_CHAIN_ID)
+  if (prepared.chainId !== network.chainIdNumber)
     throw new Error("PREPARE_WRONG_NETWORK");
   if (!sameAddress(prepared.requiredSigner, input.walletAddress))
     throw new Error("PREPARE_SIGNER_MISMATCH");
@@ -42,10 +45,12 @@ export async function sendPreparedTransaction(input: {
   readonly provider: Eip1193Provider;
   readonly walletAddress: `0x${string}`;
   readonly prepared: PrepareActionDto;
+  readonly network?: ProductNetworkConfig;
 }): Promise<`0x${string}`> {
+  const network = input.network ?? PRODUCT_WALLET_NETWORK;
   if (input.prepared.result !== "PREPARED")
     throw new Error("TRANSACTION_NOT_REQUIRED");
-  if (input.prepared.chainId !== ARC_TESTNET_CHAIN_ID)
+  if (input.prepared.chainId !== network.chainIdNumber)
     throw new Error("PREPARE_WRONG_NETWORK");
   if (!sameAddress(input.prepared.requiredSigner, input.walletAddress))
     throw new Error("PREPARE_SIGNER_MISMATCH");

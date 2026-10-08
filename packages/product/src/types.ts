@@ -1,5 +1,6 @@
 import type { CanonicalGithubPrMergedCondition, Hex32 } from "@pact/protocol";
 import type { Address, Hex } from "viem";
+import type { ProductNetworkId } from "./network";
 
 export const draftLifecycles = ["DRAFT", "ACTION_REQUIRED", "LINKED"] as const;
 export type DraftLifecycle = (typeof draftLifecycles)[number];
@@ -47,7 +48,7 @@ export interface PactDraft {
   readonly baseBranch: string;
   readonly event: "PR_MERGED";
   readonly amountBaseUnits: bigint;
-  readonly network: "arc-testnet";
+  readonly network: ProductNetworkId;
   readonly chainId: bigint;
   readonly condition: CanonicalGithubPrMergedCondition;
   readonly conditionHash: Hex32;
@@ -107,6 +108,8 @@ export interface AuthNonce {
 }
 
 export interface CreateDraftInput {
+  readonly network: ProductNetworkId;
+  readonly chainId: bigint;
   readonly creatingWallet: Address;
   readonly providerAddress: Address;
   readonly githubRepository: string;

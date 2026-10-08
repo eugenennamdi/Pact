@@ -5,11 +5,8 @@ import {
   type Address,
   type Hex,
 } from "viem";
-import {
-  AUTH_NONCE_TTL_SECONDS,
-  PRODUCT_CHAIN_ID,
-  PRODUCT_CHAIN_ID_NUMBER,
-} from "./constants";
+import { AUTH_NONCE_TTL_SECONDS } from "./constants";
+import type { ProductNetworkConfig } from "./network";
 import type { AuthNonce, ProductRepository } from "./types";
 
 const STATEMENT = "Sign in to Pact with your wallet.";
@@ -20,7 +17,7 @@ export interface Challenge {
   readonly walletAddress: Address;
   readonly domain: string;
   readonly uri: string;
-  readonly chainId: typeof PRODUCT_CHAIN_ID_NUMBER;
+  readonly chainId: number;
   readonly nonce: string;
   readonly issuedAt: string;
   readonly expirationTime: string;
@@ -105,7 +102,7 @@ export function parseChallengeMessage(message: string): ParsedChallenge {
     walletAddress,
     domain,
     uri,
-    chainId: chainId as typeof PRODUCT_CHAIN_ID_NUMBER,
+    chainId,
     nonce,
     issuedAt,
     expirationTime,
@@ -120,6 +117,7 @@ export async function issueChallenge(input: {
   readonly repository: ProductRepository;
   readonly walletAddress: string;
   readonly publicOrigin: URL;
+  readonly network: ProductNetworkConfig;
   readonly now?: Date;
 }): Promise<Challenge> {
   const walletAddress = getAddress(input.walletAddress);
@@ -132,7 +130,7 @@ export async function issueChallenge(input: {
     domain: input.publicOrigin.host,
     uri: input.publicOrigin.origin,
     nonce: randomBytes(18).toString("base64url"),
-    chainId: PRODUCT_CHAIN_ID,
+    chainId: input.network.chainId,
     issuedAt: issuedAtDate,
     expiresAt: expiresAtDate,
   });
@@ -140,7 +138,7 @@ export async function issueChallenge(input: {
     walletAddress,
     domain: stored.domain,
     uri: stored.uri,
-    chainId: PRODUCT_CHAIN_ID_NUMBER,
+    chainId: input.network.chainIdNumber,
     nonce: stored.nonce,
     issuedAt: canonicalIso(stored.issuedAt),
     expirationTime: canonicalIso(stored.expiresAt),
@@ -155,15 +153,16 @@ function validateStoredChallenge(
   parsed: ParsedChallenge,
   stored: AuthNonce,
   publicOrigin: URL,
+  network: ProductNetworkConfig,
   now: Date,
 ): void {
   if (
     parsed.domain !== publicOrigin.host ||
     parsed.uri !== publicOrigin.origin ||
-    parsed.chainId !== PRODUCT_CHAIN_ID_NUMBER ||
+    parsed.chainId !== network.chainIdNumber ||
     stored.domain !== parsed.domain ||
     stored.uri !== parsed.uri ||
-    stored.chainId !== PRODUCT_CHAIN_ID ||
+    stored.chainId !== network.chainId ||
     stored.walletAddress !== parsed.walletAddress ||
     stored.issuedAt.toISOString() !== parsed.issuedAt ||
     stored.expiresAt.toISOString() !== parsed.expirationTime
@@ -180,6 +179,7 @@ function validateStoredChallenge(
 export async function verifyChallenge(input: {
   readonly repository: ProductRepository;
   readonly publicOrigin: URL;
+  readonly network: ProductNetworkConfig;
   readonly message: string;
   readonly signature: string;
   readonly now?: Date;
@@ -192,7 +192,13 @@ export async function verifyChallenge(input: {
   const parsed = parseChallengeMessage(input.message);
   const stored = await input.repository.getNonce(parsed.nonce);
   if (stored === undefined) throw new Error("NONCE_NOT_FOUND");
-  validateStoredChallenge(parsed, stored, input.publicOrigin, now);
+  validateStoredChallenge(
+    parsed,
+    stored,
+    input.publicOrigin,
+    input.network,
+    now,
+  );
   const recover = input.recoverAddress ?? recoverMessageAddress;
   const recovered = getAddress(
     await recover({

@@ -18,12 +18,12 @@ import {
 } from "./auth-flow";
 import { createProductApiClient } from "./product-client";
 import {
-  ARC_TESTNET_CHAIN_ID,
+  PRODUCT_WALLET_NETWORK,
   WalletDiscovery,
   bindWalletEvents,
   connectWallet,
   parseWalletChainId,
-  switchToArcTestnet,
+  switchToProductNetwork,
   type DiscoveredWalletProvider,
   type Eip1193Provider,
 } from "./wallet";
@@ -468,7 +468,7 @@ export function WalletBoundary({ children }: { readonly children: ReactNode }) {
     setBusy(true);
     setMessage(null);
     try {
-      await switchToArcTestnet(provider);
+      await switchToProductNetwork(provider, PRODUCT_WALLET_NETWORK);
       const connected = await connectWallet(provider);
       setAddress(connected.address);
       setChainId(connected.chainId);
@@ -653,13 +653,17 @@ export function WalletBoundary({ children }: { readonly children: ReactNode }) {
         <div className="wallet-network-row">
           <span>Network</span>
           <strong>
-            {chainId === ARC_TESTNET_CHAIN_ID ? "Arc Testnet" : "Wrong network"}
+            {chainId === PRODUCT_WALLET_NETWORK.chainIdNumber
+              ? PRODUCT_WALLET_NETWORK.displayName
+              : "Wrong network"}
           </strong>
         </div>
-        {chainId !== ARC_TESTNET_CHAIN_ID ? (
+        {chainId !== PRODUCT_WALLET_NETWORK.chainIdNumber ? (
           <div className="wallet-dialog-callout warning">
             <div className="wallet-callout-text">
-              <strong>Pact requires Arc Testnet</strong>
+              <strong>
+                Pact requires {PRODUCT_WALLET_NETWORK.displayName}
+              </strong>
               <small>Switch networks to interact with contracts.</small>
             </div>
             <button
@@ -668,7 +672,7 @@ export function WalletBoundary({ children }: { readonly children: ReactNode }) {
               onClick={() => void switchNetwork()}
               disabled={busy}
             >
-              Switch to Arc Testnet
+              Switch to {PRODUCT_WALLET_NETWORK.displayName}
             </button>
           </div>
         ) : !authenticated ? (
@@ -721,7 +725,7 @@ export function WalletRequirement() {
   const wallet = useWallet();
   if (
     wallet.address !== null &&
-    wallet.chainId === ARC_TESTNET_CHAIN_ID &&
+    wallet.chainId === PRODUCT_WALLET_NETWORK.chainIdNumber &&
     wallet.authenticated
   ) {
     return null;
@@ -744,12 +748,14 @@ export function WalletRequirement() {
       </div>
     );
   }
-  if (wallet.chainId !== ARC_TESTNET_CHAIN_ID) {
+  if (wallet.chainId !== PRODUCT_WALLET_NETWORK.chainIdNumber) {
     return (
       <div className="wallet-requirement wallet-requirement-warning">
         <div className="wallet-requirement-copy">
           <strong>Wrong network</strong>
-          <span>Switch to Arc Testnet to continue.</span>
+          <span>
+            Switch to {PRODUCT_WALLET_NETWORK.displayName} to continue.
+          </span>
           {wallet.message !== null && (
             <span role="alert" className="wallet-requirement-message">
               {wallet.message}
@@ -761,7 +767,7 @@ export function WalletRequirement() {
           onClick={() => void wallet.switchNetwork()}
           disabled={wallet.busy}
         >
-          Switch to Arc Testnet
+          Switch to {PRODUCT_WALLET_NETWORK.displayName}
         </button>
       </div>
     );

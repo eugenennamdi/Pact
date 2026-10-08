@@ -1,13 +1,15 @@
 import type { Address } from "viem";
-import {
-  PRODUCT_COMMERCE_ADDRESS,
-  PRODUCT_EVALUATOR_ADDRESS,
-} from "./constants";
+import { loadCertifiedProductDeployment } from "./deployment";
+import { PERSISTED_PRODUCT_NETWORK, type ProductNetworkId } from "./network";
 import type {
   ProductProjectionInput,
   PublicPactStatus,
   WalletActionKind,
 } from "./types";
+
+const PERSISTED_PRODUCT_DEPLOYMENT = loadCertifiedProductDeployment(
+  PERSISTED_PRODUCT_NETWORK,
+);
 
 export interface NextAction {
   readonly actor: "CLIENT" | "PROVIDER" | "PACT" | "NONE";
@@ -16,7 +18,7 @@ export interface NextAction {
 
 export interface PublicPactDto {
   readonly slug: string;
-  readonly network: "arc-testnet";
+  readonly network: ProductNetworkId;
   readonly chainId: number;
   readonly client: Address;
   readonly provider: Address;
@@ -248,8 +250,8 @@ export function toPublicPactDto(input: ProductProjectionInput): PublicPactDto {
     conditionHash: input.draft.conditionHash,
     jobId: input.jobId?.toString() ?? null,
     jobKey: input.jobKey,
-    commerceAddress: PRODUCT_COMMERCE_ADDRESS,
-    evaluatorAddress: PRODUCT_EVALUATOR_ADDRESS,
+    commerceAddress: PERSISTED_PRODUCT_DEPLOYMENT.commerce,
+    evaluatorAddress: PERSISTED_PRODUCT_DEPLOYMENT.evaluator,
     completionDeadline: input.completionDeadline?.toString() ?? null,
     expiry: input.chainExpiredAt?.toString() ?? null,
     status,

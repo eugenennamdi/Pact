@@ -1,5 +1,9 @@
-export const ARC_TESTNET_CHAIN_ID = 5_042_002;
-export const ARC_TESTNET_CHAIN_HEX = "0x4cef52";
+import {
+  DEFAULT_PRODUCT_NETWORK,
+  type ProductNetworkConfig,
+} from "../../../packages/product/src/network";
+
+export const PRODUCT_WALLET_NETWORK = DEFAULT_PRODUCT_NETWORK;
 
 export interface Eip1193RequestArguments {
   readonly method: string;
@@ -168,13 +172,14 @@ export async function connectWallet(provider: Eip1193Provider): Promise<{
   });
 }
 
-export async function switchToArcTestnet(
+export async function switchToProductNetwork(
   provider: Eip1193Provider,
+  network: ProductNetworkConfig = PRODUCT_WALLET_NETWORK,
 ): Promise<void> {
   try {
     await provider.request({
       method: "wallet_switchEthereumChain",
-      params: [{ chainId: ARC_TESTNET_CHAIN_HEX }],
+      params: [{ chainId: network.hexChainId }],
     });
   } catch (error) {
     const code =
@@ -186,10 +191,10 @@ export async function switchToArcTestnet(
       method: "wallet_addEthereumChain",
       params: [
         {
-          chainId: ARC_TESTNET_CHAIN_HEX,
-          chainName: "Arc Testnet",
-          nativeCurrency: { name: "USDC", symbol: "USDC", decimals: 18 },
-          rpcUrls: ["https://rpc.testnet.arc.io"],
+          chainId: network.hexChainId,
+          chainName: network.displayName,
+          nativeCurrency: network.nativeCurrency,
+          rpcUrls: [network.defaultPublicRpcUrl],
         },
       ],
     });

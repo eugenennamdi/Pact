@@ -6,6 +6,10 @@ import {
   loadProductConfig,
   validateSessionSecret,
 } from "./config";
+import {
+  ARC_MAINNET_PRODUCT_NETWORK,
+  ARC_TESTNET_PRODUCT_NETWORK,
+} from "./network";
 
 const CLIENT = getAddress("0x1111111111111111111111111111111111111111");
 const PROVIDER = getAddress("0x2222222222222222222222222222222222222222");
@@ -16,12 +20,28 @@ describe("product configuration and authorization", () => {
       PACT_PUBLIC_ORIGIN: "https://pact.example",
       PACT_SESSION_SECRET: "k".repeat(64),
       DATABASE_URL: "postgresql://local.invalid/pact",
-      PACT_PRODUCT_ARC_RPC_URL: "https://rpc.testnet.arc.io",
+      PACT_PRODUCT_ARC_RPC_URL: "https://rpc.mainnet.arc.io",
       NODE_ENV: "production",
     });
     expect(config.publicOrigin.origin).toBe("https://pact.example");
     expect(config.secureCookie).toBe(true);
+    expect(config.network).toBe(ARC_MAINNET_PRODUCT_NETWORK);
+    expect(config.chainId).toBe(5_042);
+    expect(config.selfServiceEnabled).toBe(false);
+  });
+
+  it("allows tests to select Arc Testnet explicitly", () => {
+    const config = loadProductConfig(
+      {
+        PACT_PUBLIC_ORIGIN: "https://pact.example",
+        PACT_SESSION_SECRET: "k".repeat(64),
+        DATABASE_URL: "postgresql://local.invalid/pact",
+        PACT_PRODUCT_ARC_RPC_URL: "https://rpc.testnet.arc.io",
+      },
+      ARC_TESTNET_PRODUCT_NETWORK,
+    );
     expect(config.chainId).toBe(5_042_002);
+    expect(config.selfServiceEnabled).toBe(true);
   });
 
   it("enforces session-key entropy and rejects placeholders", () => {
