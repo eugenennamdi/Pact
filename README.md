@@ -1,6 +1,10 @@
 # Pact
 
-Pact turns objectively verifiable outcomes into ERC-8183 settlement decisions.
+Pact is an Arc-native outcome verification layer for ERC-8183 settlement.
+
+- **Live app:** https://pact-web-production-ea97.up.railway.app
+- **Live Mainnet proof:**
+  https://pact-web-production-ea97.up.railway.app/proof/arc-mainnet/job/2
 
 Pact lets developers bind an objective software outcome to an ERC-8183 job and
 release escrow only after the configured condition is independently verified.
