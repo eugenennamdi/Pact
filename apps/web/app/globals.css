@@ -305,6 +305,7 @@
 }
 
 .proof-details-grid details {
+  container-type: inline-size;
   min-width: 0;
   border: 1px solid var(--border-default);
   border-radius: var(--radius-lg);
@@ -323,16 +324,20 @@
 }
 
 .proof-details-grid dl {
+  display: flex;
+  flex-direction: column;
   margin: 0;
   padding: 0.3rem 1.15rem 1rem;
 }
 
 .proof-detail-row {
-  display: grid;
-  grid-template-columns: minmax(7.5rem, 0.35fr) minmax(0, 1fr);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: 1rem;
   padding: 0.7rem 0;
   border-bottom: 1px solid var(--border-subtle);
+  min-width: 0;
 }
 
 .proof-detail-row:last-child {
@@ -345,18 +350,26 @@
 }
 
 .proof-detail-row dt {
+  flex-shrink: 0;
   color: var(--text-muted);
   font-size: 0.75rem;
 }
 
 .proof-detail-row dd {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
   min-width: 0;
   font-size: 0.8rem;
+  text-align: right;
   overflow-wrap: anywhere;
 }
 
 .proof-detail-row .tech-address-wrapper {
-  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
   max-width: 100%;
 }
 
@@ -364,7 +377,30 @@
   max-width: 100%;
 }
 
-@media (max-width: 56rem) {
+@container (max-width: 27rem) {
+  .proof-detail-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.35rem;
+  }
+
+  .proof-detail-row dt {
+    text-align: left;
+  }
+
+  .proof-detail-row dd {
+    width: 100%;
+    justify-content: space-between;
+    text-align: left;
+  }
+
+  .proof-detail-row .tech-address-wrapper {
+    width: 100%;
+    justify-content: space-between;
+  }
+}
+
+@media (max-width: 60rem) {
   .proof-details-grid {
     grid-template-columns: 1fr;
   }
@@ -398,8 +434,24 @@
   }
 
   .proof-detail-row {
-    grid-template-columns: 1fr;
-    gap: 0.3rem;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.35rem;
+  }
+
+  .proof-detail-row dt {
+    text-align: left;
+  }
+
+  .proof-detail-row dd {
+    width: 100%;
+    justify-content: space-between;
+    text-align: left;
+  }
+
+  .proof-detail-row .tech-address-wrapper {
+    width: 100%;
+    justify-content: space-between;
   }
 }
 

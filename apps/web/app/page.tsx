@@ -22,7 +22,7 @@ export default function Home() {
             Create a Pact
           </Link>
           <Link className="button-link secondary" href="/proof">
-            View Mainnet proof
+            View live Mainnet proof
           </Link>
         </div>
       </section>
@@ -117,7 +117,7 @@ export default function Home() {
           </p>
         </div>
         <Link className="button-link secondary" href="/proof">
-          View Mainnet proof
+          View live Mainnet proof
         </Link>
       </section>
     </main>
