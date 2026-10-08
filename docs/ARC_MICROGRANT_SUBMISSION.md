@@ -90,19 +90,17 @@ Arc Mainnet contracts:
 
 ## Technical highlights
 
-- Deterministic Condition V1 serialization and condition commitments.
-- Immutable condition binding while an ERC-8183 job is open.
-- Independent authoritative GitHub API verification; client claims and webhook
-  deliveries are not treated as evidence.
-- Canonical Evidence V1 artifacts and domain-separated verifier attestations.
-- Positive-only evaluation: an unmet or temporarily unverifiable condition is
-  never converted into a rejection.
-- Idempotent, nonce-aware relay processing with ambiguity resolved through
-  onchain reconciliation rather than blind retries.
-- Strict authority boundary: Pact owns verification and evidence; ERC-8183 owns
-  escrow, job state, payout, and refund.
-- Public proof projection linking the condition, evidence, transaction,
+- ERC-8183 owns canonical job state, USDC escrow, settlement, and payout.
+- Deterministic Condition V1 serialization and immutable condition commitments.
+- Independent, authoritative GitHub API verification.
+- Canonical evidence and domain-separated signed verifier attestations.
+- Evidence-linked PactEvaluator completion decisions.
+- Separate verifier and relay authorities.
+- Exactly-once relay semantics with durable idempotency controls.
+- Onchain reconciliation instead of blind transaction resend.
+- Immutable public proof artifacts linking condition, evidence, transaction,
   contracts, and final Arc state.
+- A fail-closed Mainnet release gate tied to reviewed deployment provenance.
 
 ## Current scope
 
@@ -197,18 +195,12 @@ not a speculative architecture.
 # 60-second reviewer flow
 
 1. Open the live app: <https://pact-web-production-ea97.up.railway.app>.
-2. Read the landing-page explanation of Pact's GitHub-to-ERC-8183 settlement
-   flow.
-3. Open the Proof Center:
-   <https://pact-web-production-ea97.up.railway.app/proof>.
-4. Select the canonical Arc Mainnet proof for job `#2`.
-5. Confirm the GitHub `PR_MERGED` condition, `0.01 USDC` budget, and `Completed`
-   status.
-6. Inspect the evidence hash, settlement transaction, contract addresses, and
-   one-broadcast relay record.
-7. Open the public repository to review the architecture, deployment facts, demo
-   script, tests, and immutable proof artifact:
-   <https://github.com/eugenennamdi/Pact>.
+2. Click **View Mainnet Proof**.
+3. See Arc Mainnet job `#2` marked `Completed`.
+4. See the GitHub `PR_MERGED` condition.
+5. See the `0.01 USDC` provider payout.
+6. Open the settlement transaction.
+7. See the evidence-linked completion.
 
 # Submission recommendation
 
