@@ -142,7 +142,7 @@
       ]
     },
     "baselineFingerprint": "sha256:cfc5d576e345e673e36aea5511f230150070bd6fb624c33affaf2012af1a6a8a",
-    "fingerprint": "sha256:7a4c81c9d806e012bed250c13b88cf5abeb9540f58ce9eef18081ba874335a7a",
+    "fingerprint": "sha256:492a500c9be0a9f2b35e6cc83bc6c821033536c2ff26e5a108c465efd85e31f6",
     "resolvedDependencyEntries": 316,
     "maintenance": [
       {
@@ -303,6 +303,66 @@
         ],
         "fromFingerprint": "sha256:c0f13475013ecd71cd8d974c453b41c4ad4ce32d1daeeded8d14c23d16db82cb",
         "toFingerprint": "sha256:7a4c81c9d806e012bed250c13b88cf5abeb9540f58ce9eef18081ba874335a7a",
+        "classification": "DEPLOYED_APPLICATION_RUNTIME"
+      },
+      {
+        "schemaVersion": 1,
+        "type": "SECURITY_PATCH",
+        "advisory": "GHSA-cjq9-62q9-8jv4",
+        "changes": [
+          {
+            "package": "@next/env",
+            "from": "16.3.6",
+            "to": "16.3.8"
+          },
+          {
+            "package": "@next/swc-darwin-arm64",
+            "from": "16.3.6",
+            "to": "16.3.8"
+          },
+          {
+            "package": "@next/swc-darwin-x64",
+            "from": "16.3.6",
+            "to": "16.3.8"
+          },
+          {
+            "package": "@next/swc-linux-arm64-gnu",
+            "from": "16.3.6",
+            "to": "16.3.8"
+          },
+          {
+            "package": "@next/swc-linux-arm64-musl",
+            "from": "16.3.6",
+            "to": "16.3.8"
+          },
+          {
+            "package": "@next/swc-linux-x64-gnu",
+            "from": "16.3.6",
+            "to": "16.3.8"
+          },
+          {
+            "package": "@next/swc-linux-x64-musl",
+            "from": "16.3.6",
+            "to": "16.3.8"
+          },
+          {
+            "package": "@next/swc-win32-arm64-msvc",
+            "from": "16.3.6",
+            "to": "16.3.8"
+          },
+          {
+            "package": "@next/swc-win32-x64-msvc",
+            "from": "16.3.6",
+            "to": "16.3.8"
+          },
+          {
+            "package": "next",
+            "from": "16.3.6",
+            "to": "16.3.8"
+          }
+        ],
+        "fromFingerprint": "sha256:7a4c81c9d806e012bed250c13b88cf5abeb9540f58ce9eef18081ba874335a7a",
+        "toFingerprint": "sha256:492a500c9be0a9f2b35e6cc83bc6c821033536c2ff26e5a108c465efd85e31f6",
         "classification": "DEPLOYED_APPLICATION_RUNTIME"
       }
     ]
