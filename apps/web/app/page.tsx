@@ -1,4 +1,9 @@
+import type { Metadata } from "next";
 import Link from "next/link";
+
+export const metadata: Metadata = {
+  alternates: { canonical: "/" },
+};
 
 export default function Home() {
   return (
@@ -17,7 +22,7 @@ export default function Home() {
             Create a Pact
           </Link>
           <Link className="button-link secondary" href="/proof">
-            View Mainnet proof
+            View live Mainnet proof
           </Link>
         </div>
       </section>
@@ -112,7 +117,7 @@ export default function Home() {
           </p>
         </div>
         <Link className="button-link secondary" href="/proof">
-          Inspect Mainnet proof
+          View live Mainnet proof
         </Link>
       </section>
     </main>

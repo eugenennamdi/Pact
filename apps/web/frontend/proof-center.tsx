@@ -42,9 +42,9 @@ function DetailValue({
       <dt>{label}</dt>
       <dd>
         {kind === "address" ? (
-          <AddressDisplay address={value} truncate={false} />
+          <AddressDisplay address={value} />
         ) : kind === "hash" ? (
-          <HashDisplay hash={value} truncate={false} />
+          <HashDisplay hash={value} />
         ) : (
           value
         )}
@@ -499,7 +499,7 @@ export function ProofCenter({
                   {timestamp(proof.githubEvidence.observedAt)}
                 </time>
               </div>
-              <HashDisplay hash={proof.attestation.digest} truncate={false} />
+              <HashDisplay hash={proof.attestation.digest} />
             </div>
           </li>
           <li>

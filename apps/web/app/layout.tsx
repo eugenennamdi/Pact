@@ -8,9 +8,44 @@ import {
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Pact — Programmable settlement for verifiable outcomes",
+  metadataBase: new URL("https://pact-web-production-ea97.up.railway.app"),
+  title: "Pact — Outcome verification for ERC-8183 settlement",
   description:
-    "Lock USDC against an outcome. Prove the outcome happened. Settle through ERC-8183 on Arc.",
+    "Pact verifies objective external outcomes and turns them into evidence-linked ERC-8183 USDC settlement decisions on Arc.",
+  icons: {
+    icon: [{ url: "/favicon.svg", type: "image/svg+xml" }],
+    shortcut: "/favicon.svg",
+    apple: [
+      {
+        url: "/apple-touch-icon.png",
+        sizes: "180x180",
+        type: "image/png",
+      },
+    ],
+  },
+  openGraph: {
+    type: "website",
+    url: "/",
+    siteName: "Pact",
+    title: "Pact — Outcome verification for ERC-8183 settlement",
+    description:
+      "Pact verifies objective external outcomes and turns them into evidence-linked ERC-8183 USDC settlement decisions on Arc.",
+    images: [
+      {
+        url: "/og.png",
+        width: 1200,
+        height: 630,
+        alt: "Pact — Objective outcomes. ERC-8183 settlement. Live on Arc Mainnet.",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Pact — Outcome verification for ERC-8183 settlement",
+    description:
+      "Pact verifies objective external outcomes and turns them into evidence-linked ERC-8183 USDC settlement decisions on Arc.",
+    images: ["/og.png"],
+  },
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
@@ -31,10 +66,10 @@ export default function RootLayout({ children }: { children: ReactNode }) {
               <div className="nav-actions">
                 <nav className="nav-links" aria-label="Primary navigation">
                   <Link href="/create" className="nav-link">
-                    Create Pact
+                    Create a Pact
                   </Link>
                   <Link href="/proof" className="nav-link">
-                    Proof center
+                    Proof Center
                   </Link>
                 </nav>
                 <WalletHeaderControl />
