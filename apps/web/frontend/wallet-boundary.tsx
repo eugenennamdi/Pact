@@ -712,29 +712,9 @@ export function useWallet(): WalletContextValue {
 }
 
 export function WalletHeaderControl() {
-  const wallet = useWallet();
-  if (wallet.address === null) {
-    return (
-      <button
-        type="button"
-        className="wallet-trigger"
-        onClick={wallet.openConnectModal}
-      >
-        Connect wallet
-      </button>
-    );
-  }
-  const wrongNetwork = wallet.chainId !== ARC_TESTNET_CHAIN_ID;
-  return (
-    <button
-      type="button"
-      className={`account-trigger${wrongNetwork ? " account-trigger-warning" : ""}`}
-      aria-label={`Open wallet account ${truncateWalletAddress(wallet.address)}`}
-      onClick={wallet.openAccountDialog}
-    >
-      {truncateWalletAddress(wallet.address)}
-    </button>
-  );
+  // Public wallet connection control is disabled in production demonstration mode.
+  // Connect wallet implementation preserved for future Mainnet migration.
+  return null;
 }
 
 export function WalletRequirement() {

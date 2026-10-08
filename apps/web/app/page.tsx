@@ -18,12 +18,17 @@ export default function Home() {
           ERC-8183 job on Arc.
         </p>
         <div className="actions">
-          <Link className="button-link" href="/create">
-            Create a Pact
-          </Link>
-          <Link className="button-link secondary" href="/proof">
+          <Link className="button-link" href="/proof/arc-mainnet/job/2">
             View live Mainnet proof
           </Link>
+          <a
+            className="button-link secondary"
+            href="https://github.com/eugenennamdi/Pact"
+            target="_blank"
+            rel="noreferrer"
+          >
+            View source
+          </a>
         </div>
       </section>
 
@@ -116,7 +121,7 @@ export default function Home() {
             broadcast on Arc Mainnet (Chain ID 5042).
           </p>
         </div>
-        <Link className="button-link secondary" href="/proof">
+        <Link className="button-link secondary" href="/proof/arc-mainnet/job/2">
           View live Mainnet proof
         </Link>
       </section>

@@ -65,9 +65,6 @@ export default function RootLayout({ children }: { children: ReactNode }) {
               </div>
               <div className="nav-actions">
                 <nav className="nav-links" aria-label="Primary navigation">
-                  <Link href="/create" className="nav-link">
-                    Create a Pact
-                  </Link>
                   <Link href="/proof" className="nav-link">
                     Proof Center
                   </Link>
