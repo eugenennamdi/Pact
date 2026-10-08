@@ -37,10 +37,18 @@ describe("proof selection and route contract", () => {
 
   it("keeps full canonical values behind copy and explorer affordances", async () => {
     const component = await source("../frontend/proof-center.tsx");
+    const presentation = await source("../frontend/presentation.tsx");
+    const styles = await source("../app/globals.css");
     expect(component).toContain("<HashDisplay hash={hash} />");
     expect(component).toContain("/tx/${hash}");
-    expect(component).toContain("truncate={false}");
+    expect(component).not.toContain("truncate={false}");
     expect(component).not.toMatch(/\.slice\([^)]*hash|truncateHex/);
+    expect(presentation).toContain('className="tech-hash" aria-label={value}');
+    expect(presentation).toContain("<CopyButton text={value}");
+    expect(presentation).toContain('document.execCommand("copy")');
+    expect(styles).toContain("text-overflow: ellipsis");
+    expect(styles).toContain("white-space: nowrap");
+    expect(styles).toContain("width: 4.75rem");
   });
 
   it("preserves stable direct Mainnet job routes", async () => {

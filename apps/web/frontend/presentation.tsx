@@ -333,14 +333,31 @@ export function CopyButton({
   const [copied, setCopied] = useState(false);
 
   async function handleCopy() {
+    let didCopy = false;
     try {
       if (typeof navigator !== "undefined" && navigator.clipboard) {
         await navigator.clipboard.writeText(text);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
+        didCopy = true;
       }
     } catch {
-      // Fallback
+      // Continue to the local/non-secure context fallback below.
+    }
+
+    if (!didCopy && typeof document !== "undefined") {
+      const textarea = document.createElement("textarea");
+      textarea.value = text;
+      textarea.setAttribute("readonly", "");
+      textarea.style.position = "fixed";
+      textarea.style.opacity = "0";
+      document.body.append(textarea);
+      textarea.select();
+      didCopy = document.execCommand("copy");
+      textarea.remove();
+    }
+
+    if (didCopy) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
     }
   }
 
@@ -349,7 +366,9 @@ export function CopyButton({
       type="button"
       className="btn-copy"
       onClick={() => void handleCopy()}
-      aria-label={`${label} to clipboard`}
+      aria-label={
+        copied ? `${label} copied to clipboard` : `${label} to clipboard`
+      }
       title={copied ? "Copied!" : `${label}: ${text}`}
     >
       {copied ? (
@@ -360,7 +379,7 @@ export function CopyButton({
       ) : (
         <>
           <Icon name="copy" className="icon-copy" />
-          <span className="copy-label">{label}</span>
+          <span className="copy-label">Copy</span>
         </>
       )}
     </button>
@@ -372,6 +391,30 @@ export function truncateHex(hex: string, keep = 6): string {
   return `${hex.slice(0, keep + 2)}…${hex.slice(-keep)}`;
 }
 
+function TechnicalValue({
+  value,
+  keep,
+  copyLabel,
+  truncate,
+  copyable,
+}: {
+  readonly value: string;
+  readonly keep: number;
+  readonly copyLabel: string;
+  readonly truncate: boolean;
+  readonly copyable: boolean;
+}) {
+  const display = truncate ? truncateHex(value, keep) : value;
+  return (
+    <span className="tech-address-wrapper" title={value}>
+      <code className="tech-hash" aria-label={value}>
+        {display}
+      </code>
+      {copyable && <CopyButton text={value} label={copyLabel} />}
+    </span>
+  );
+}
+
 export function AddressDisplay({
   address,
   truncate = true,
@@ -381,12 +424,14 @@ export function AddressDisplay({
   readonly truncate?: boolean;
   readonly copyable?: boolean;
 }) {
-  const display = truncate ? truncateHex(address, 4) : address;
   return (
-    <span className="tech-address-wrapper" title={address}>
-      <code className="tech-hash">{display}</code>
-      {copyable && <CopyButton text={address} label="Copy address" />}
-    </span>
+    <TechnicalValue
+      value={address}
+      keep={4}
+      copyLabel="Copy address"
+      truncate={truncate}
+      copyable={copyable}
+    />
   );
 }
 
@@ -399,12 +444,14 @@ export function HashDisplay({
   readonly truncate?: boolean;
   readonly copyable?: boolean;
 }) {
-  const display = truncate ? truncateHex(hash, 6) : hash;
   return (
-    <span className="tech-address-wrapper" title={hash}>
-      <code className="tech-hash">{display}</code>
-      {copyable && <CopyButton text={hash} label="Copy hash" />}
-    </span>
+    <TechnicalValue
+      value={hash}
+      keep={6}
+      copyLabel="Copy hash"
+      truncate={truncate}
+      copyable={copyable}
+    />
   );
 }
 

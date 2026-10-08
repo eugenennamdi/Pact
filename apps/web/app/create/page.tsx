@@ -1,4 +1,9 @@
+import type { Metadata } from "next";
 import { CreatePact } from "../../frontend/create-pact";
+
+export const metadata: Metadata = {
+  alternates: { canonical: "/create" },
+};
 
 export default function CreatePage() {
   return (
