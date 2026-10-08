@@ -211,7 +211,7 @@ export function CreatePact() {
               </span>
               <dl style={{ margin: 0 }}>
                 <dt>Network</dt>
-                <dd>Arc Testnet (5042002)</dd>
+                <dd>Arc Mainnet (5042)</dd>
                 <dt>Escrow standard</dt>
                 <dd>ERC-8183</dd>
                 <dt>Evaluator</dt>
