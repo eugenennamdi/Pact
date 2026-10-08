@@ -5,11 +5,12 @@ export default function Home() {
     <main className="page">
       <section className="landing-hero" aria-labelledby="hero-title">
         <h1 id="hero-title">
-          Programmable settlement for verifiable outcomes.
+          Objective outcomes, turned into ERC-8183 settlement decisions.
         </h1>
         <p className="lede">
-          Pact locks USDC in ERC-8183 escrow and settles automatically when an
-          independently verified condition is satisfied onchain.
+          Lock USDC against a GitHub pull-request merge. Pact independently
+          verifies the outcome, produces signed evidence, and settles the
+          ERC-8183 job on Arc.
         </p>
         <div className="actions">
           <Link className="button-link" href="/create">
@@ -106,8 +107,8 @@ export default function Home() {
             Real Arc Mainnet settlement
           </h2>
           <p style={{ margin: 0 }}>
-            Job #1 · 0.10 USDC · Completed via single relay broadcast on Arc
-            Mainnet (Chain ID 5042).
+            Job #2 · GitHub PR #7 · 0.01 USDC · Completed via one relay
+            broadcast on Arc Mainnet (Chain ID 5042).
           </p>
         </div>
         <Link className="button-link secondary" href="/proof">
