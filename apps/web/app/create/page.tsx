@@ -1,21 +1,5 @@
-import type { Metadata } from "next";
-import { CreatePact } from "../../frontend/create-pact";
-
-export const metadata: Metadata = {
-  alternates: { canonical: "/create" },
-};
+import { redirect } from "next/navigation";
 
 export default function CreatePage() {
-  return (
-    <main className="page">
-      <div className="page-header">
-        <h1>Create a Pact</h1>
-        <p className="lede">
-          Connect and authenticate the client wallet. Pact validates an open
-          public GitHub pull request and enforces protocol deadlines onchain.
-        </p>
-      </div>
-      <CreatePact />
-    </main>
-  );
+  redirect("/proof/arc-mainnet/job/2");
 }
